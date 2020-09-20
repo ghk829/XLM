@@ -184,6 +184,9 @@ def get_parser():
     parser.add_argument("--reload_checkpoint", type=str, default="",
                         help="Reload a checkpoint")
 
+    parser.add_argument("--is_adapt",type=bool_flag,default=False,
+                        help="Adaptation for Domain")
+
     # beam search (for MT only)
     parser.add_argument("--beam_size", type=int, default=1,
                         help="Beam size, default = 1 (greedy decoding)")
