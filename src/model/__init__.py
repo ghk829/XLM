@@ -102,10 +102,11 @@ def set_pretrain_emb(model, dico, word2id, embeddings):
                 % (n_found, len(dico), 100. * n_found / len(dico)))
 
 
-def build_model(params, dico, is_adapt=False):
+def build_model(params, dico):
     """
     Build model.
     """
+    is_adapt = params.is_adapt
     if params.encoder_only:
         # build
         model = TransformerModel(params, dico, is_encoder=True, with_output=True)
