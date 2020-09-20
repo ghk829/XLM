@@ -13,7 +13,6 @@ from .pretrain import load_embeddings
 from .transformer import DECODER_ONLY_PARAMS, TransformerModel  # , TRANSFORMER_LAYER_PARAMS
 from .memory import HashingMemory
 
-
 logger = getLogger()
 
 
@@ -103,7 +102,7 @@ def set_pretrain_emb(model, dico, word2id, embeddings):
                 % (n_found, len(dico), 100. * n_found / len(dico)))
 
 
-def build_model(params, dico):
+def build_model(params, dico, is_adapt=False):
     """
     Build model.
     """
@@ -161,7 +160,13 @@ def build_model(params, dico):
                 enc_reload = enc_reload['model' if 'model' in enc_reload else 'encoder']
                 if all([k.startswith('module.') for k in enc_reload.keys()]):
                     enc_reload = {k[len('module.'):]: v for k, v in enc_reload.items()}
-                encoder.load_state_dict(enc_reload)
+
+                if not is_adapt:
+                    encoder.load_state_dict(enc_reload)
+                else:
+                    enc_reload = {k: v for k, v in enc_reload.items() if
+                                  k not in ['embeddings.weight', 'pred_layer.proj.weight', 'pred_layer.proj.bias']}
+                    encoder.load_state_dict(enc_reload, strict=False)
 
             # reload decoder
             if dec_path != '':
@@ -175,7 +180,13 @@ def build_model(params, dico):
                         if name % i not in dec_reload:
                             logger.warning("Parameter %s not found." % (name % i))
                             dec_reload[name % i] = decoder.state_dict()[name % i]
-                decoder.load_state_dict(dec_reload)
+
+                if not is_adapt:
+                    decoder.load_state_dict(dec_reload)
+                else:
+                    dec_reload = {k: v for k, v in dec_reload.items() if
+                                  k not in ['embeddings.weight', 'pred_layer.proj.weight', 'pred_layer.proj.bias']}
+                    decoder.load_state_dict(dec_reload, strict=False)
 
         logger.debug("Encoder: {}".format(encoder))
         logger.debug("Decoder: {}".format(decoder))

@@ -1,12 +1,12 @@
 #!/bin/bash
 
 FASTBPE=tools/fastBPE/fast
-PAIR=en-de
+PAIR=de-en
 BASE_FILE="tok"
-NCODES=60000
+NCODES=32000
+for DOMAIN in "subtitles"; do
 
-for DOMAIN in "it" "emea" "acquis" "koran" "subtitles"; do
-
+  echo $BASE_FILE
   OUTPATH=data/processed/$PAIR/$DOMAIN
   mkdir -p $OUTPATH
 
@@ -25,30 +25,31 @@ for DOMAIN in "it" "emea" "acquis" "koran" "subtitles"; do
     done
 
     if [ $SPLIT = "train" ]; then
+      $FASTBPE applybpe $OUTPATH/$SPLIT.$PAIR.$LG dataset/$DOMAIN-$SPLIT.$BASE_FILE.$LG $OUTPATH/codes
       $FASTBPE getvocab $OUTPATH/$SPLIT.$PAIR.en $OUTPATH/$SPLIT.$PAIR.de >$OUTPATH/vocab
+      $FASTBPE getvocab $OUTPATH/$SPLIT.$PAIR.en >$OUTPATH/en.vocab
+      $FASTBPE getvocab $OUTPATH/$SPLIT.$PAIR.de >$OUTPATH/de.vocab
       echo "VOCAB IS BUILT"
+    else
+      for LG in "en" "de"; do
+        $FASTBPE applybpe $OUTPATH/$SPLIT.$PAIR.$LG dataset/$DOMAIN-$SPLIT.$BASE_FILE.$LG $OUTPATH/codes $OUTPATH/$LG.vocab
+        echo "VOCAB IS USED $LG $SPLIT"
+      done
     fi
 
     for LG in "en" "de"; do
       python preprocess.py $OUTPATH/vocab $OUTPATH/$SPLIT.$PAIR.$LG
-    donec
+    done
 
   done
-  # prefix : dev -> valid
+  # dev -> valid
   for LG in "en" "de"; do
     mv $OUTPATH/dev.$PAIR.$LG.pth $OUTPATH/valid.$PAIR.$LG.pth
   done
 
-  # XLM bug
   for SPLIT in "train" "valid" "test"; do
-    mv $OUTPATH/$SPLIT.$PAIR.en.pth $OUTPATH/$SPLIT.de-en.en.pth
-    mv $OUTPATH/$SPLIT.$PAIR.de.pth $OUTPATH/$SPLIT.de-en.de.pth
-  done
-
-  # Monolingual Corpus
-  for SPLIT in "train" "valid" "test"; do
-    cp $OUTPATH/$SPLIT.de-en.en.pth $OUTPATH/$SPLIT.en.pth
-    cp $OUTPATH/$SPLIT.de-en.de.pth $OUTPATH/$SPLIT.de.pth
+    cp $OUTPATH/$SPLIT.$PAIR.en.pth $OUTPATH/$SPLIT.en.pth
+    cp $OUTPATH/$SPLIT.$PAIR.de.pth $OUTPATH/$SPLIT.de.pth
   done
 
 done
