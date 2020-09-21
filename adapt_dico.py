@@ -24,7 +24,7 @@ if __name__ == '__main__':
     parser = get_parser()
     params = parser.parse_args()
 
-    params.eval_domain
+    eval_domain = os.path.join('data/processed/de-en', params.eval_domain)
 
     pretrained_domain_path = os.path.join('data/processed/de-en', params.pretrained_domain)
     src_pth = os.path.join(pretrained_domain_path, 'valid.de-en.de.pth')
@@ -36,7 +36,7 @@ if __name__ == '__main__':
     # torch.save(enc_dico, os.path.join(params.eval_domain, 'enc_dico.pth'))
     # torch.save(dec_dico, os.path.join(params.eval_domain, 'dec_dico.pth'))
 
-    pth_files = [f for f in os.listdir(params.eval_domain) if
+    pth_files = [f for f in os.listdir(eval_domain) if
                  f.endswith('pth') and f not in ['enc_dico.pth', 'dec_dico.pth']]
 
     for f in pth_files:
@@ -48,4 +48,4 @@ if __name__ == '__main__':
         else:
             state['dico'] = dec_dico
 
-        torch.save(state, os.path.join(params.eval_domain, f))
+        torch.save(state, os.path.join(eval_domain, f))
