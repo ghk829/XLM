@@ -41,7 +41,7 @@ if __name__ == '__main__':
 
     for f in pth_files:
 
-        state = torch.load(f)
+        state = torch.load(os.path.join(eval_domain,f))
 
         if f.endswith('de.pth'):
             state['dico'] = enc_dico
