@@ -13,7 +13,6 @@ import torch
 from .dataset import StreamDataset, Dataset, ParallelDataset
 from .dictionary import BOS_WORD, EOS_WORD, PAD_WORD, UNK_WORD, MASK_WORD
 
-
 logger = getLogger()
 
 
@@ -131,7 +130,8 @@ def load_mono_data(params, data):
             data['mono_stream'][lang][splt] = StreamDataset(mono_data['sentences'], mono_data['positions'], bs, params)
 
             # if there are several processes on the same machine, we can split the dataset
-            if splt == 'train' and params.split_data and 1 < params.n_gpu_per_node <= data['mono_stream'][lang][splt].n_batches:
+            if splt == 'train' and params.split_data and 1 < params.n_gpu_per_node <= data['mono_stream'][lang][
+                splt].n_batches:
                 n_batches = data['mono_stream'][lang][splt].n_batches // params.n_gpu_per_node
                 a = n_batches * params.local_rank
                 b = n_batches * params.local_rank + n_batches
@@ -283,7 +283,8 @@ def check_data_params(params):
     params.bt_src_langs = [l1 for l1, _, _ in params.bt_steps]
 
     # check monolingual datasets
-    required_mono = set([l1 for l1, l2 in (params.mlm_steps + params.clm_steps) if l2 is None] + params.ae_steps + params.bt_src_langs)
+    required_mono = set(
+        [l1 for l1, l2 in (params.mlm_steps + params.clm_steps) if l2 is None] + params.ae_steps + params.bt_src_langs)
     params.mono_dataset = {
         lang: {
             splt: os.path.join(params.data_path, '%s.%s.pth' % (splt, lang))
@@ -299,11 +300,17 @@ def check_data_params(params):
     # check parallel datasets
     required_para_train = set(params.clm_steps + params.mlm_steps + params.pc_steps + params.mt_steps)
     required_para = required_para_train | set([(l2, l3) for _, l2, l3 in params.bt_steps])
+
+    para_set = ['train', 'valid', 'test']
+
+    if params.eval_only:
+        para_set = ['valid', 'test']
+
     params.para_dataset = {
         (src, tgt): {
             splt: (os.path.join(params.data_path, '%s.%s-%s.%s.pth' % (splt, src, tgt, src)),
                    os.path.join(params.data_path, '%s.%s-%s.%s.pth' % (splt, src, tgt, tgt)))
-            for splt in ['train', 'valid', 'test']
+            for splt in para_set
             if splt != 'train' or (src, tgt) in required_para_train or (tgt, src) in required_para_train
         } for src in params.langs for tgt in params.langs
         if src < tgt and ((src, tgt) in required_para or (tgt, src) in required_para)
@@ -314,7 +321,8 @@ def check_data_params(params):
                 logger.error(f"{p1} not found")
             if not os.path.isfile(p2):
                 logger.error(f"{p2} not found")
-    assert all([all([os.path.isfile(p1) and os.path.isfile(p2) for p1, p2 in paths.values()]) for paths in params.para_dataset.values()])
+    assert all([all([os.path.isfile(p1) and os.path.isfile(p2) for p1, p2 in paths.values()]) for paths in
+                params.para_dataset.values()])
 
     # check that we can evaluate on BLEU
     assert params.eval_bleu is False or len(params.mt_steps + params.bt_steps) > 0
@@ -340,12 +348,14 @@ def load_data(params):
     logger.info('============ Data summary')
     for lang, v in data['mono_stream'].items():
         for data_set in v.keys():
-            logger.info('{: <18} - {: >5} - {: >12}:{: >10}'.format('Monolingual data', data_set, lang, len(v[data_set])))
+            logger.info(
+                '{: <18} - {: >5} - {: >12}:{: >10}'.format('Monolingual data', data_set, lang, len(v[data_set])))
 
     # parallel data summary
     for (src, tgt), v in data['para'].items():
         for data_set in v.keys():
-            logger.info('{: <18} - {: >5} - {: >12}:{: >10}'.format('Parallel data', data_set, '%s-%s' % (src, tgt), len(v[data_set])))
+            logger.info('{: <18} - {: >5} - {: >12}:{: >10}'.format('Parallel data', data_set, '%s-%s' % (src, tgt),
+                                                                    len(v[data_set])))
 
     logger.info("")
     return data
