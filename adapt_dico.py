@@ -37,7 +37,7 @@ if __name__ == '__main__':
     # torch.save(dec_dico, os.path.join(params.eval_domain, 'dec_dico.pth'))
 
     pth_files = [f for f in os.listdir(eval_domain) if
-                 f.endswith('pth') and f not in ['enc_dico.pth', 'dec_dico.pth']]
+                 f.endswith('pth') and f not in ['enc_dico.pth', 'dec_dico.pth','dico.pth']]
 
     for f in pth_files:
 
