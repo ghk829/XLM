@@ -46,7 +46,7 @@ for DOMAIN in "subtitles"; do
   for LG in "en" "de"; do
     mv $OUTPATH/dev.$PAIR.$LG.pth $OUTPATH/valid.$PAIR.$LG.pth
   done
-
+  # Monolingual
   for SPLIT in "train" "valid" "test"; do
     cp $OUTPATH/$SPLIT.$PAIR.en.pth $OUTPATH/$SPLIT.en.pth
     cp $OUTPATH/$SPLIT.$PAIR.de.pth $OUTPATH/$SPLIT.de.pth
