@@ -4,7 +4,7 @@ FASTBPE=tools/fastBPE/fast
 PAIR=de-en
 SRC_DOMAIN="subtitles"
 TGT_DOMAIN="koran"
-OUTPATH=data/processed/$PAIR/$SRC_DOMAIN_$TGT_DOMAIN
+OUTPATH=data/processed/$PAIR/$SRC_DOMAIN-$TGT_DOMAIN
 
 mkdir -p $OUTPATH
 
@@ -41,7 +41,7 @@ for DOMAIN in $SRC_DOMAIN; do
   done
 
   # Monolingual
-  for SPLIT in "train" "valid" "test"; do
+  for SPLIT in "valid" "test"; do
     cp $OUTPATH/$SPLIT.$PAIR.en.pth $OUTPATH/$SPLIT.en.pth
     cp $OUTPATH/$SPLIT.$PAIR.de.pth $OUTPATH/$SPLIT.de.pth
   done
