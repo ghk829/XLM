@@ -2,19 +2,18 @@
 
 FASTBPE=tools/fastBPE/fast
 PAIR=de-en
-SRC_DOMAIN="subtitles"
-TGT_DOMAIN="koran"
-OUTPATH=data/processed/$PAIR/$SRC_DOMAIN-$TGT_DOMAIN
+EVAL_DOMAIN="subtitles"
+SRC_DOMAIN="koran"
+OUTPATH=data/processed/$PAIR/$SRC_DOMAIN-$EVAL_DOMAIN
 
 mkdir -p $OUTPATH
 
-cp data/processed/$PAIR/$TGT_DOMAIN/vocab $OUTPATH/vocab
-cp data/processed/$PAIR/$TGT_DOMAIN/codes $OUTPATH/codes
-
+cp data/processed/$PAIR/$SRC_DOMAIN/vocab $OUTPATH/vocab
+cp data/processed/$PAIR/$SRC_DOMAIN/codes $OUTPATH/codes
 
 BASE_FILE="tok"
-NCODES=32000
-for DOMAIN in $SRC_DOMAIN; do
+
+for DOMAIN in $EVAL_DOMAIN; do
 
   echo $BASE_FILE
 
