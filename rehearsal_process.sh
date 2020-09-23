@@ -17,6 +17,8 @@ for SRC_DOMAIN in $(echo $SRC_DOMAINS | sed -e 's/\,/ /g'); do
   cp data/processed/$PAIR/$SRC_DOMAIN/en.vocab $OUTPATH/en.vocab
   cp data/processed/$PAIR/$SRC_DOMAIN/de.vocab $OUTPATH/de.vocab
 
+  echo "copied WMT"
+
   for SPLIT in "train"; do
     for LG in "en" "de"; do
       cp data/processed/$PAIR/$SRC_DOMAIN/$SPLIT.$PAIR.$LG $OUTPATH/$SPLIT.$PAIR.$LG
@@ -33,14 +35,28 @@ for SRC_DOMAIN in $(echo $SRC_DOMAINS | sed -e 's/\,/ /g'); do
         $FASTBPE applybpe $OUTPATH/$SPLIT.$PAIR.$LG.tmp dataset/$DOMAIN-$SPLIT.$BASE_FILE.$LG $OUTPATH/codes $OUTPATH/$LG.vocab
         echo "VOCAB IS USED $LG $SPLIT"
         cat $OUTPATH/$SPLIT.$PAIR.$LG.tmp >>$OUTPATH/$SPLIT.$PAIR.$LG
+        rm $OUTPATH/$SPLIT.$PAIR.$LG.tmp
+      done
+    done
+
+    # last domain is used as validation
+    for SPLIT in "dev" "test"; do
+      for LG in "en" "de";do
+        $FASTBPE applybpe $OUTPATH/$SPLIT.$PAIR.$LG dataset/$DOMAIN-$SPLIT.$BASE_FILE.$LG $OUTPATH/codes $OUTPATH/$LG.vocab
+        echo "VOCAB IS USED $LG $SPLIT"
       done
     done
   done
 
-  for SPLIT in "train"; do
+  for SPLIT in "train" "dev" "test"; do
     for LG in "en" "de"; do
       python preprocess.py $OUTPATH/vocab $OUTPATH/$SPLIT.$PAIR.$LG
     done
+  done
+
+  # dev -> valid
+  for LG in "en" "de"; do
+    mv $OUTPATH/dev.$PAIR.$LG.pth $OUTPATH/valid.$PAIR.$LG.pth
   done
 
 done
