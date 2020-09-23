@@ -43,9 +43,4 @@ for SRC_DOMAIN in $(echo $SRC_DOMAINS | sed -e 's/\,/ /g'); do
     done
   done
 
-  # dev -> valid
-  for LG in "en" "de"; do
-    mv $OUTPATH/dev.$PAIR.$LG.pth $OUTPATH/valid.$PAIR.$LG.pth
-  done
-
 done
