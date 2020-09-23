@@ -21,21 +21,20 @@ for DOMAIN in "subtitles"; do
   for SPLIT in "train" "dev" "test"; do
 
     for LG in "en" "de"; do
-      $FASTBPE applybpe $OUTPATH/$SPLIT.$PAIR.$LG dataset/$DOMAIN-$SPLIT.$BASE_FILE.$LG $OUTPATH/codes
-    done
 
-    if [ $SPLIT = "train" ]; then
-      $FASTBPE applybpe $OUTPATH/$SPLIT.$PAIR.$LG dataset/$DOMAIN-$SPLIT.$BASE_FILE.$LG $OUTPATH/codes
-      $FASTBPE getvocab $OUTPATH/$SPLIT.$PAIR.en $OUTPATH/$SPLIT.$PAIR.de >$OUTPATH/vocab
-      $FASTBPE getvocab $OUTPATH/$SPLIT.$PAIR.en >$OUTPATH/en.vocab
-      $FASTBPE getvocab $OUTPATH/$SPLIT.$PAIR.de >$OUTPATH/de.vocab
-      echo "VOCAB IS BUILT"
-    else
-      for LG in "en" "de"; do
-        $FASTBPE applybpe $OUTPATH/$SPLIT.$PAIR.$LG dataset/$DOMAIN-$SPLIT.$BASE_FILE.$LG $OUTPATH/codes $OUTPATH/$LG.vocab
-        echo "VOCAB IS USED $LG $SPLIT"
-      done
-    fi
+      if [ $SPLIT = "train" ]; then
+        $FASTBPE applybpe $OUTPATH/$SPLIT.$PAIR.$LG dataset/$DOMAIN-$SPLIT.$BASE_FILE.$LG $OUTPATH/codes
+        $FASTBPE getvocab $OUTPATH/$SPLIT.$PAIR.en $OUTPATH/$SPLIT.$PAIR.de >$OUTPATH/vocab
+        $FASTBPE getvocab $OUTPATH/$SPLIT.$PAIR.en >$OUTPATH/en.vocab
+        $FASTBPE getvocab $OUTPATH/$SPLIT.$PAIR.de >$OUTPATH/de.vocab
+        echo "VOCAB IS BUILT"
+      else
+        for LG in "en" "de"; do
+          $FASTBPE applybpe $OUTPATH/$SPLIT.$PAIR.$LG dataset/$DOMAIN-$SPLIT.$BASE_FILE.$LG $OUTPATH/codes $OUTPATH/$LG.vocab
+          echo "VOCAB IS USED $LG $SPLIT"
+        done
+      fi
+    done
 
     for LG in "en" "de"; do
       python preprocess.py $OUTPATH/vocab $OUTPATH/$SPLIT.$PAIR.$LG

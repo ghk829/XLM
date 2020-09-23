@@ -16,15 +16,11 @@ for SRC_DOMAIN in $(echo $SRC_DOMAINS | sed -e 's/\,/ /g'); do
     cp data/processed/$PAIR/$SRC_DOMAIN/vocab $OUTPATH/vocab
     cp data/processed/$PAIR/$SRC_DOMAIN/codes $OUTPATH/codes
     cp data/processed/$PAIR/$SRC_DOMAIN/en.vocab $OUTPATH/en.vocab
-    cp data/processed/$PAIR/$SRC_DOMAIN/en.vocab $OUTPATH/de.vocab
+    cp data/processed/$PAIR/$SRC_DOMAIN/de.vocab $OUTPATH/de.vocab
 
     echo $BASE_FILE
 
     for SPLIT in "dev" "test"; do
-
-      for LG in "en" "de"; do
-        $FASTBPE applybpe $OUTPATH/$SPLIT.$PAIR.$LG dataset/$EVAL_DOMAIN-$SPLIT.$BASE_FILE.$LG $OUTPATH/codes
-      done
 
       for LG in "en" "de"; do
         $FASTBPE applybpe $OUTPATH/$SPLIT.$PAIR.$LG dataset/$EVAL_DOMAIN-$SPLIT.$BASE_FILE.$LG $OUTPATH/codes $OUTPATH/$LG.vocab
