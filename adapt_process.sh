@@ -2,8 +2,8 @@
 
 FASTBPE=tools/fastBPE/fast
 PAIR=de-en
-EVAL_DOMAINS="subtitles"
-SRC_DOMAINS="koran"
+EVAL_DOMAINS="koran it emea acquis"
+SRC_DOMAINS="subtitles"
 
 BASE_FILE="tok"
 
@@ -11,7 +11,7 @@ for SRC_DOMAIN in $(echo $SRC_DOMAINS | sed -e 's/\,/ /g'); do
 
   for EVAL_DOMAIN in $(echo $EVAL_DOMAINS | sed -e 's/\,/ /g'); do
 
-    OUTPATH=data/processed/$PAIR/EVAL-$SRC_DOMAIN-$EVAL_DOMAIN
+    OUTPATH=data/processed/$PAIR/CON-non-cum-$SRC_DOMAIN-$EVAL_DOMAIN
     mkdir -p $OUTPATH
     cp data/processed/$PAIR/$SRC_DOMAIN/vocab $OUTPATH/vocab
     cp data/processed/$PAIR/$SRC_DOMAIN/codes $OUTPATH/codes
