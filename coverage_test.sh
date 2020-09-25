@@ -17,6 +17,7 @@ for SRC_DOMAIN in $(echo $SRC_DOMAINS | sed -e 's/\,/ /g'); do
     SRC_VOCAB_PATH=data/processed/$PAIR/$SRC_DOMAIN
 
     echo $BASE_FILE
+    echo $SRC_DOMAIN-$EVAL_DOMAIN
 
     for SPLIT in "train"; do
 
