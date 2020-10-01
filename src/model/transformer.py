@@ -402,7 +402,7 @@ class TransformerModel(nn.Module):
                 self.memories['%i_%s' % (layer_id, pos)] = HashingMemory.build(self.dim, self.dim, params)
 
         for layer_id in range(self.n_layers):
-            if params.unfreeze_heads != '':
+            if params.freeze_heads != '':
                 attention = MultiSegmentHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout)
                 if max(range(self.n_layers)) == layer_id or max(range(self.n_layers)) -1 == layer_id:
 
