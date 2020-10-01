@@ -404,20 +404,17 @@ class TransformerModel(nn.Module):
         for layer_id in range(self.n_layers):
             if params.freeze_heads != '':
                 attention = MultiSegmentHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout)
-                if max(range(self.n_layers)) == layer_id or max(range(self.n_layers)) -1 == layer_id:
-
-                    freeze_heads = list(map(int,params.freeze_heads.split(',')))
-
-                    if freeze_heads[0] == -1: # pretrain
-                        pass
-                    else:
-                        for freeze_head in freeze_heads:
-                            attention.q_lin[freeze_head].weight.requires_grad = False
-                            attention.q_lin[freeze_head].bias.requires_grad = False
-                            attention.k_lin[freeze_head].weight.requires_grad = False
-                            attention.k_lin[freeze_head].bias.requires_grad = False
-                            attention.v_lin[freeze_head].weight.requires_grad = False
-                            attention.v_lin[freeze_head].bias.requires_grad = False
+                freeze_heads = list(map(int,params.freeze_heads.split(',')))
+                if freeze_heads[0] == -1: # pretrain
+                    pass
+                else:
+                    for freeze_head in freeze_heads:
+                        attention.q_lin[freeze_head].weight.requires_grad = False
+                        attention.q_lin[freeze_head].bias.requires_grad = False
+                        attention.k_lin[freeze_head].weight.requires_grad = False
+                        attention.k_lin[freeze_head].bias.requires_grad = False
+                        attention.v_lin[freeze_head].weight.requires_grad = False
+                        attention.v_lin[freeze_head].bias.requires_grad = False
             else:
                 attention = MultiHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout)
 
