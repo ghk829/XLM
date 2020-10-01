@@ -218,6 +218,108 @@ class MultiHeadAttention(nn.Module):
 
         return self.out_lin(context)
 
+class MultiSegmentHeadAttention(nn.Module):
+
+    NEW_ID = itertools.count()
+
+    def __init__(self, n_heads, dim, dropout):
+        super().__init__()
+        self.layer_id = next(MultiSegmentHeadAttention.NEW_ID)
+        self.dim = dim
+        self.n_heads = n_heads
+        self.dropout = dropout
+        assert self.dim % self.n_heads == 0
+
+        dim_per_head = self.dim // self.n_heads
+        self.q_lin = nn.ModuleList()
+        self.k_lin = nn.ModuleList()
+        self.v_lin = nn.ModuleList()
+
+        for _ in range(self.n_heads):
+            self.q_lin.append(Linear(dim_per_head, dim_per_head))
+
+        for _ in range(self.n_heads):
+            self.k_lin.append(Linear(dim_per_head, dim_per_head))
+
+        for _ in range(self.n_heads):
+            self.v_lin.append(Linear(dim_per_head, dim_per_head))
+
+        self.out_lin = Linear(dim, dim)
+
+    def forward(self, input, mask, kv=None, cache=None):
+        """
+        Self-attention (if kv is None) or attention over source sentence (provided by kv).
+        """
+        # Input is (bs, qlen, dim)
+        # Mask is (bs, klen) (non-causal) or (bs, klen, klen)
+        bs, qlen, dim = input.size()
+        if kv is None:
+            klen = qlen if cache is None else cache['slen'] + qlen
+        else:
+            klen = kv.size(1)
+        assert dim == self.dim, 'Dimensions do not match: %s input vs %s configured' % (dim, self.dim)
+        n_heads = self.n_heads
+        dim_per_head = dim // n_heads
+        mask_reshape = (bs, 1, qlen, klen) if mask.dim() == 3 else (bs, 1, 1, klen)
+
+        def shape(x):
+            """  projection """
+            return x.view(bs, -1, self.n_heads, dim_per_head).transpose(1, 2)
+
+        def unshape(x):
+            """  compute context """
+            return x.transpose(1, 2).contiguous().view(bs, -1, self.n_heads * dim_per_head)
+
+        q_list = []
+        for i in range(n_heads):
+            input_ = input[:,:,dim_per_head * i:dim_per_head * i + dim_per_head]
+            q_list.append(self.q_lin[i](input_))
+        q = torch.cat(q_list,dim=-1)
+
+
+        k_list = []
+        for i in range(n_heads):
+            input_ = input[:,:,dim_per_head * i:dim_per_head * i + dim_per_head]
+            k_list.append(self.k_lin[i](input_))
+        k = torch.cat(k_list,dim=-1)
+
+        v_list = []
+        for i in range(n_heads):
+            input_ = input[:, :, dim_per_head * i:dim_per_head * i + dim_per_head]
+            v_list.append(self.v_lin[i](input_))
+        v = torch.cat(v_list, dim=-1)
+
+        q = shape(q)                                          # (bs, n_heads, qlen, dim_per_head)
+        if kv is None:
+            k = shape(k)                                      # (bs, n_heads, qlen, dim_per_head)
+            v = shape(v)                                      # (bs, n_heads, qlen, dim_per_head)
+        elif cache is None or self.layer_id not in cache:
+            k = v = kv
+            k = shape(self.k_lin(k))                                          # (bs, n_heads, qlen, dim_per_head)
+            v = shape(self.v_lin(v))                                          # (bs, n_heads, qlen, dim_per_head)
+
+        if cache is not None:
+            if self.layer_id in cache:
+                if kv is None:
+                    k_, v_ = cache[self.layer_id]
+                    k = torch.cat([k_, k], dim=2)                             # (bs, n_heads, klen, dim_per_head)
+                    v = torch.cat([v_, v], dim=2)                             # (bs, n_heads, klen, dim_per_head)
+                else:
+                    k, v = cache[self.layer_id]
+            cache[self.layer_id] = (k, v)
+
+        q = q / math.sqrt(dim_per_head)                                       # (bs, n_heads, qlen, dim_per_head)
+        scores = torch.matmul(q, k.transpose(2, 3))                           # (bs, n_heads, qlen, klen)
+        mask = (mask == 0).view(mask_reshape).expand_as(scores)               # (bs, n_heads, qlen, klen)
+        scores.masked_fill_(mask, -float('inf'))                              # (bs, n_heads, qlen, klen)
+
+        weights = F.softmax(scores.float(), dim=-1).type_as(scores)           # (bs, n_heads, qlen, klen)
+        weights = F.dropout(weights, p=self.dropout, training=self.training)  # (bs, n_heads, qlen, klen)
+        context = torch.matmul(weights, v)                                    # (bs, n_heads, qlen, dim_per_head)
+        context = unshape(context)                                            # (bs, qlen, dim)
+
+        return self.out_lin(context)
+
 
 class TransformerFFN(nn.Module):
 
@@ -300,7 +402,26 @@ class TransformerModel(nn.Module):
                 self.memories['%i_%s' % (layer_id, pos)] = HashingMemory.build(self.dim, self.dim, params)
 
         for layer_id in range(self.n_layers):
-            self.attentions.append(MultiHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout))
+            if params.unfreeze_heads != '':
+                attention = MultiSegmentHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout)
+                if max(range(self.n_layers)) == layer_id or max(range(self.n_layers)) -1 == layer_id:
+
+                    freeze_heads = list(map(int,params.freeze_heads.split(',')))
+
+                    if freeze_heads[0] == -1: # pretrain
+                        pass
+                    else:
+                        for freeze_head in freeze_heads:
+                            attention.q_lin[freeze_head].weight.requires_grad = False
+                            attention.q_lin[freeze_head].bias.requires_grad = False
+                            attention.k_lin[freeze_head].weight.requires_grad = False
+                            attention.k_lin[freeze_head].bias.requires_grad = False
+                            attention.v_lin[freeze_head].weight.requires_grad = False
+                            attention.v_lin[freeze_head].bias.requires_grad = False
+            else:
+                attention = MultiHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout)
+
+            self.attentions.append(attention)
             self.layer_norm1.append(nn.LayerNorm(self.dim, eps=1e-12))
             if self.is_decoder:
                 self.layer_norm15.append(nn.LayerNorm(self.dim, eps=1e-12))
