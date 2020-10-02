@@ -20,7 +20,7 @@ for SRC_DOMAIN in $(echo $SRC_DOMAINS | sed -e 's/\,/ /g'); do
 
     echo $BASE_FILE
 
-    for SPLIT in "dev" "test"; do
+    for SPLIT in "train" "dev" "test"; do
 
       for LG in "en" "de"; do
         $FASTBPE applybpe $OUTPATH/$SPLIT.$PAIR.$LG dataset/$EVAL_DOMAIN-$SPLIT.$BASE_FILE.$LG $OUTPATH/codes $OUTPATH/$LG.vocab
@@ -38,7 +38,7 @@ for SRC_DOMAIN in $(echo $SRC_DOMAINS | sed -e 's/\,/ /g'); do
     done
 
     # Monolingual
-    for SPLIT in "valid" "test"; do
+    for SPLIT in "train" "valid" "test"; do
       cp $OUTPATH/$SPLIT.$PAIR.en.pth $OUTPATH/$SPLIT.en.pth
       cp $OUTPATH/$SPLIT.$PAIR.de.pth $OUTPATH/$SPLIT.de.pth
     done

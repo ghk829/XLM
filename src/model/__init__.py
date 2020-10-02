@@ -169,6 +169,22 @@ def build_model(params, dico):
                                   k not in ['embeddings.weight', 'pred_layer.proj.weight', 'pred_layer.proj.bias']}
                     encoder.load_state_dict(enc_reload, strict=False)
 
+                if params.freeze_heads != '':
+                    for p in encoder.named_parameters():
+                        p.requires_grad = False
+
+                    freeze_heads = list(map(int, params.freeze_heads.split(',')))
+                    unfreeze_heads = set(range(params.n_heads)) - set(freeze_heads)
+                    unfreeze_heads = list(unfreeze_heads)
+                    for unfreeze_head in unfreeze_heads:
+                        encoder.attentions[len(encoder.attentions)-1].q_lin[unfreeze_head].weight.requires_grad = True
+                        encoder.attentions[len(encoder.attentions)-1].q_lin[unfreeze_head].bias.requires_grad = True
+                        encoder.attentions[len(encoder.attentions)-1].k_lin[unfreeze_head].weight.requires_grad = True
+                        encoder.attentions[len(encoder.attentions)-1].k_lin[unfreeze_head].bias.requires_grad = True
+                        encoder.attentions[len(encoder.attentions)-1].v_lin[unfreeze_head].weight.requires_grad = True
+                        encoder.attentions[len(encoder.attentions)-1].v_lin[unfreeze_head].bias.requires_grad = True
+
+
             # reload decoder
             if dec_path != '':
                 logger.info("Reloading decoder from %s ..." % dec_path)
@@ -189,6 +205,29 @@ def build_model(params, dico):
                     dec_reload = {k: v for k, v in dec_reload.items() if
                                   k not in ['embeddings.weight', 'pred_layer.proj.weight', 'pred_layer.proj.bias']}
                     decoder.load_state_dict(dec_reload, strict=False)
+
+                if params.freeze_heads != '':
+                    for p in decoder.named_parameters():
+                        p.requires_grad = False
+
+                    freeze_heads = list(map(int, params.freeze_heads.split(',')))
+                    unfreeze_heads = set(range(params.n_heads)) - set(freeze_heads)
+                    unfreeze_heads = list(unfreeze_heads)
+                    for unfreeze_head in unfreeze_heads:
+                        decoder.attentions[len(decoder.attentions)-1].q_lin[unfreeze_head].weight.requires_grad = True
+                        decoder.attentions[len(decoder.attentions)-1].q_lin[unfreeze_head].bias.requires_grad = True
+                        decoder.attentions[len(decoder.attentions)-1].k_lin[unfreeze_head].weight.requires_grad = True
+                        decoder.attentions[len(decoder.attentions)-1].k_lin[unfreeze_head].bias.requires_grad = True
+                        decoder.attentions[len(decoder.attentions)-1].v_lin[unfreeze_head].weight.requires_grad = True
+                        decoder.attentions[len(decoder.attentions)-1].v_lin[unfreeze_head].bias.requires_grad = True
+
+                    for unfreeze_head in unfreeze_heads:
+                        decoder.encoder_att[len(decoder.encoder_att)-1].q_lin[unfreeze_head].weight.requires_grad = True
+                        decoder.encoder_att[len(decoder.encoder_att)-1].q_lin[unfreeze_head].bias.requires_grad = True
+                        decoder.encoder_att[len(decoder.encoder_att)-1].k_lin[unfreeze_head].weight.requires_grad = True
+                        decoder.encoder_att[len(decoder.encoder_att)-1].k_lin[unfreeze_head].bias.requires_grad = True
+                        decoder.encoder_att[len(decoder.encoder_att)-1].v_lin[unfreeze_head].weight.requires_grad = True
+                        decoder.encoder_att[len(decoder.encoder_att)-1].v_lin[unfreeze_head].bias.requires_grad = True
 
         logger.debug("Encoder: {}".format(encoder))
         logger.debug("Decoder: {}".format(decoder))
