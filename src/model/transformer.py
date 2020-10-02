@@ -422,7 +422,23 @@ class TransformerModel(nn.Module):
             self.layer_norm1.append(nn.LayerNorm(self.dim, eps=1e-12))
             if self.is_decoder:
                 self.layer_norm15.append(nn.LayerNorm(self.dim, eps=1e-12))
-                self.encoder_attn.append(MultiHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout))
+
+                if params.freeze_heads != '':
+                    attention = MultiSegmentHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout)
+                    freeze_heads = list(map(int, params.freeze_heads.split(',')))
+                    if freeze_heads[0] == -1:  # pretrain
+                        pass
+                    else:
+                        for freeze_head in freeze_heads:
+                            attention.q_lin[freeze_head].weight.requires_grad = False
+                            attention.q_lin[freeze_head].bias.requires_grad = False
+                            attention.k_lin[freeze_head].weight.requires_grad = False
+                            attention.k_lin[freeze_head].bias.requires_grad = False
+                            attention.v_lin[freeze_head].weight.requires_grad = False
+                            attention.v_lin[freeze_head].bias.requires_grad = False
+                else:
+                    attention = MultiHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout)
+                self.encoder_attn.append(attention)
             if ('%i_in' % layer_id) in self.memories:
                 self.ffns.append(None)
             else:
