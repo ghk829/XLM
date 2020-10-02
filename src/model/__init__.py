@@ -226,12 +226,12 @@ def build_model(params, dico):
                         decoder.attentions[len(decoder.attentions)-1].v_lin[unfreeze_head].bias.requires_grad = True
 
                     for unfreeze_head in unfreeze_heads:
-                        decoder.encoder_att[len(decoder.encoder_att)-1].q_lin[unfreeze_head].weight.requires_grad = True
-                        decoder.encoder_att[len(decoder.encoder_att)-1].q_lin[unfreeze_head].bias.requires_grad = True
-                        decoder.encoder_att[len(decoder.encoder_att)-1].k_lin[unfreeze_head].weight.requires_grad = True
-                        decoder.encoder_att[len(decoder.encoder_att)-1].k_lin[unfreeze_head].bias.requires_grad = True
-                        decoder.encoder_att[len(decoder.encoder_att)-1].v_lin[unfreeze_head].weight.requires_grad = True
-                        decoder.encoder_att[len(decoder.encoder_att)-1].v_lin[unfreeze_head].bias.requires_grad = True
+                        decoder.encoder_attn[len(decoder.encoder_attn)-1].q_lin[unfreeze_head].weight.requires_grad = True
+                        decoder.encoder_attn[len(decoder.encoder_attn)-1].q_lin[unfreeze_head].bias.requires_grad = True
+                        decoder.encoder_attn[len(decoder.encoder_attn)-1].k_lin[unfreeze_head].weight.requires_grad = True
+                        decoder.encoder_attn[len(decoder.encoder_attn)-1].k_lin[unfreeze_head].bias.requires_grad = True
+                        decoder.encoder_attn[len(decoder.encoder_attn)-1].v_lin[unfreeze_head].weight.requires_grad = True
+                        decoder.encoder_attn[len(decoder.encoder_attn)-1].v_lin[unfreeze_head].bias.requires_grad = True
 
         logger.debug("Encoder: {}".format(encoder))
         logger.debug("Decoder: {}".format(decoder))
