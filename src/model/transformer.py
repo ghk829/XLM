@@ -295,6 +295,17 @@ class MultiSegmentHeadAttention(nn.Module):
             v = shape(v)                                      # (bs, n_heads, qlen, dim_per_head)
         elif cache is None or self.layer_id not in cache:
             k = v = kv
+            k_list = []
+            for i in range(n_heads):
+                input_ = k[:, :, dim_per_head * i:dim_per_head * i + dim_per_head]
+                k_list.append(self.k_lin[i](input_))
+            k = torch.cat(k_list, dim=-1)
+
+            v_list = []
+            for i in range(n_heads):
+                input_ = v[:, :, dim_per_head * i:dim_per_head * i + dim_per_head]
+                v_list.append(self.v_lin[i](input_))
+            v = torch.cat(v_list, dim=-1)
             k = shape(k)                                          # (bs, n_heads, qlen, dim_per_head)
             v = shape(v)                                          # (bs, n_heads, qlen, dim_per_head)
 
