@@ -295,8 +295,8 @@ class MultiSegmentHeadAttention(nn.Module):
             v = shape(v)                                      # (bs, n_heads, qlen, dim_per_head)
         elif cache is None or self.layer_id not in cache:
             k = v = kv
-            k = shape(self.k_lin(k))                                          # (bs, n_heads, qlen, dim_per_head)
-            v = shape(self.v_lin(v))                                          # (bs, n_heads, qlen, dim_per_head)
+            k = shape(k)                                          # (bs, n_heads, qlen, dim_per_head)
+            v = shape(v)                                          # (bs, n_heads, qlen, dim_per_head)
 
         if cache is not None:
             if self.layer_id in cache:
