@@ -414,7 +414,7 @@ class TransformerModel(nn.Module):
                 self.memories['%i_%s' % (layer_id, pos)] = HashingMemory.build(self.dim, self.dim, params)
 
         for layer_id in range(self.n_layers):
-            if layer_id == max(range(self.n_layers))-1:
+            if layer_id == max(range(self.n_layers)):
                 if params.freeze_heads != '':
                     attention = MultiSegmentHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout)
                     freeze_heads = list(map(int,params.freeze_heads.split(',')))
@@ -439,7 +439,7 @@ class TransformerModel(nn.Module):
             if self.is_decoder:
                 self.layer_norm15.append(nn.LayerNorm(self.dim, eps=1e-12))
 
-                if layer_id == max(range(self.n_layers)) - 1:
+                if layer_id == max(range(self.n_layers)):
                     if params.freeze_heads != '':
                         attention = MultiSegmentHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout)
                         freeze_heads = list(map(int, params.freeze_heads.split(',')))
@@ -544,7 +544,7 @@ class TransformerModel(nn.Module):
         # transformer layers
         for i in range(self.n_layers):
 
-            if getattr(self,'freeze_heads') is not None and max(range(self.n_layers)) -1 == i:
+            if getattr(self,'freeze_heads') is not None and max(range(self.n_layers)) == i:
                 attn = self.attentions[i](tensor, attn_mask, cache=cache)
                 tensor = tensor + attn
 
