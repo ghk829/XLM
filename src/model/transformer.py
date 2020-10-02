@@ -325,7 +325,7 @@ class MultiSegmentHeadAttention(nn.Module):
         scores.masked_fill_(mask, -float('inf'))                              # (bs, n_heads, qlen, klen)
 
         weights = F.softmax(scores.float(), dim=-1).type_as(scores)           # (bs, n_heads, qlen, klen)
-        weights = F.dropout(weights, p=self.dropout, training=self.training)  # (bs, n_heads, qlen, klen)
+        # weights = F.dropout(weights, p=self.dropout, training=self.training)  # (bs, n_heads, qlen, klen)
         context = torch.matmul(weights, v)                                    # (bs, n_heads, qlen, dim_per_head)
         context = unshape(context)                                            # (bs, qlen, dim)
 
@@ -383,6 +383,7 @@ class TransformerModel(nn.Module):
         self.n_layers = params.n_layers
         self.dropout = params.dropout
         self.attention_dropout = params.attention_dropout
+
         assert self.dim % self.n_heads == 0, 'transformer dim must be a multiple of n_heads'
 
         # embeddings
@@ -413,31 +414,12 @@ class TransformerModel(nn.Module):
                 self.memories['%i_%s' % (layer_id, pos)] = HashingMemory.build(self.dim, self.dim, params)
 
         for layer_id in range(self.n_layers):
-            if params.freeze_heads != '':
-                attention = MultiSegmentHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout)
-                freeze_heads = list(map(int,params.freeze_heads.split(',')))
-                if freeze_heads[0] == -1: # pretrain
-                    pass
-                else:
-                    for freeze_head in freeze_heads:
-                        attention.q_lin[freeze_head].weight.requires_grad = False
-                        attention.q_lin[freeze_head].bias.requires_grad = False
-                        attention.k_lin[freeze_head].weight.requires_grad = False
-                        attention.k_lin[freeze_head].bias.requires_grad = False
-                        attention.v_lin[freeze_head].weight.requires_grad = False
-                        attention.v_lin[freeze_head].bias.requires_grad = False
-            else:
-                attention = MultiHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout)
-
-            self.attentions.append(attention)
-            self.layer_norm1.append(nn.LayerNorm(self.dim, eps=1e-12))
-            if self.is_decoder:
-                self.layer_norm15.append(nn.LayerNorm(self.dim, eps=1e-12))
-
+            if layer_id == max(range(self.n_layers))-1:
                 if params.freeze_heads != '':
                     attention = MultiSegmentHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout)
-                    freeze_heads = list(map(int, params.freeze_heads.split(',')))
-                    if freeze_heads[0] == -1:  # pretrain
+                    freeze_heads = list(map(int,params.freeze_heads.split(',')))
+                    self.freeze_heads = freeze_heads
+                    if freeze_heads[0] == -1: # pretrain
                         pass
                     else:
                         for freeze_head in freeze_heads:
@@ -447,6 +429,32 @@ class TransformerModel(nn.Module):
                             attention.k_lin[freeze_head].bias.requires_grad = False
                             attention.v_lin[freeze_head].weight.requires_grad = False
                             attention.v_lin[freeze_head].bias.requires_grad = False
+                else:
+                    attention = MultiHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout)
+            else:
+                attention = MultiHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout)
+
+            self.attentions.append(attention)
+            self.layer_norm1.append(nn.LayerNorm(self.dim, eps=1e-12))
+            if self.is_decoder:
+                self.layer_norm15.append(nn.LayerNorm(self.dim, eps=1e-12))
+
+                if layer_id == max(range(self.n_layers)) - 1:
+                    if params.freeze_heads != '':
+                        attention = MultiSegmentHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout)
+                        freeze_heads = list(map(int, params.freeze_heads.split(',')))
+                        if freeze_heads[0] == -1:  # pretrain
+                            pass
+                        else:
+                            for freeze_head in freeze_heads:
+                                attention.q_lin[freeze_head].weight.requires_grad = False
+                                attention.q_lin[freeze_head].bias.requires_grad = False
+                                attention.k_lin[freeze_head].weight.requires_grad = False
+                                attention.k_lin[freeze_head].bias.requires_grad = False
+                                attention.v_lin[freeze_head].weight.requires_grad = False
+                                attention.v_lin[freeze_head].bias.requires_grad = False
+                    else:
+                        attention = MultiHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout)
                 else:
                     attention = MultiHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout)
                 self.encoder_attn.append(attention)
@@ -536,32 +544,60 @@ class TransformerModel(nn.Module):
         # transformer layers
         for i in range(self.n_layers):
 
-            # self attention
-            attn = self.attentions[i](tensor, attn_mask, cache=cache)
-            attn = F.dropout(attn, p=self.dropout, training=self.training)
-            tensor = tensor + attn
-            tensor = self.layer_norm1[i](tensor)
+            if getattr(self,'freeze_heads') is not None and max(range(self.n_layers)) -1 == i:
+                attn = self.attentions[i](tensor, attn_mask, cache=cache)
+                tensor = tensor + attn
 
-            # encoder attention (for decoder only)
-            if self.is_decoder and src_enc is not None:
-                attn = self.encoder_attn[i](tensor, src_mask, kv=src_enc, cache=cache)
+                # encoder attention (for decoder only)
+                if self.is_decoder and src_enc is not None:
+                    attn = self.encoder_attn[i](tensor, src_mask, kv=src_enc, cache=cache)
+                    #attn = F.dropout(attn, p=self.dropout, training=self.training)
+                    tensor = tensor + attn
+                    #tensor = self.layer_norm15[i](tensor)
+
+                # FFN
+                if ('%i_in' % i) in self.memories:
+                    tensor = tensor + self.memories['%i_in' % i](tensor)
+                else:
+                    tensor = tensor + self.ffns[i](tensor)
+                tensor = self.layer_norm2[i](tensor)
+
+                # memory
+                if ('%i_after' % i) in self.memories:
+                    tensor = tensor + self.memories['%i_after' % i](tensor)
+                # TODO: add extra layer norm here?
+
+                tensor *= mask.unsqueeze(-1).to(tensor.dtype)
+
+
+            else:
+
+                # self attention
+                attn = self.attentions[i](tensor, attn_mask, cache=cache)
                 attn = F.dropout(attn, p=self.dropout, training=self.training)
                 tensor = tensor + attn
-                tensor = self.layer_norm15[i](tensor)
+                tensor = self.layer_norm1[i](tensor)
 
-            # FFN
-            if ('%i_in' % i) in self.memories:
-                tensor = tensor + self.memories['%i_in' % i](tensor)
-            else:
-                tensor = tensor + self.ffns[i](tensor)
-            tensor = self.layer_norm2[i](tensor)
+                # encoder attention (for decoder only)
+                if self.is_decoder and src_enc is not None:
+                    attn = self.encoder_attn[i](tensor, src_mask, kv=src_enc, cache=cache)
+                    attn = F.dropout(attn, p=self.dropout, training=self.training)
+                    tensor = tensor + attn
+                    tensor = self.layer_norm15[i](tensor)
 
-            # memory
-            if ('%i_after' % i) in self.memories:
-                tensor = tensor + self.memories['%i_after' % i](tensor)
-            # TODO: add extra layer norm here?
+                # FFN
+                if ('%i_in' % i) in self.memories:
+                    tensor = tensor + self.memories['%i_in' % i](tensor)
+                else:
+                    tensor = tensor + self.ffns[i](tensor)
+                tensor = self.layer_norm2[i](tensor)
 
-            tensor *= mask.unsqueeze(-1).to(tensor.dtype)
+                # memory
+                if ('%i_after' % i) in self.memories:
+                    tensor = tensor + self.memories['%i_after' % i](tensor)
+                # TODO: add extra layer norm here?
+
+                tensor *= mask.unsqueeze(-1).to(tensor.dtype)
 
         # update cache length
         if cache is not None:
