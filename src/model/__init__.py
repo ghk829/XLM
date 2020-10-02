@@ -180,7 +180,8 @@ def build_model(params, dico):
                     for name in DECODER_ONLY_PARAMS:
                         if name % i not in dec_reload:
                             logger.warning("Parameter %s not found." % (name % i))
-                            dec_reload[name % i] = decoder.state_dict()[name % i]
+                            # for multisegmenthead
+                            #dec_reload[name % i] = decoder.state_dict()[name % i]
 
                 if not is_adapt:
                     decoder.load_state_dict(dec_reload)
