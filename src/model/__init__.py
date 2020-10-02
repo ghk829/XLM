@@ -170,12 +170,14 @@ def build_model(params, dico):
                     encoder.load_state_dict(enc_reload, strict=False)
 
                 if params.freeze_heads != '':
-                    for p in encoder.named_parameters():
+                    for p in encoder.parameters():
                         p.requires_grad = False
 
                     freeze_heads = list(map(int, params.freeze_heads.split(',')))
                     unfreeze_heads = set(range(params.n_heads)) - set(freeze_heads)
                     unfreeze_heads = list(unfreeze_heads)
+                    print('unfreeze_heads')
+                    print(unfreeze_heads)
                     for unfreeze_head in unfreeze_heads:
                         encoder.attentions[len(encoder.attentions)-1].q_lin[unfreeze_head].weight.requires_grad = True
                         encoder.attentions[len(encoder.attentions)-1].q_lin[unfreeze_head].bias.requires_grad = True
@@ -207,12 +209,14 @@ def build_model(params, dico):
                     decoder.load_state_dict(dec_reload, strict=False)
 
                 if params.freeze_heads != '':
-                    for p in decoder.named_parameters():
+                    for p in decoder.parameters():
                         p.requires_grad = False
 
                     freeze_heads = list(map(int, params.freeze_heads.split(',')))
                     unfreeze_heads = set(range(params.n_heads)) - set(freeze_heads)
                     unfreeze_heads = list(unfreeze_heads)
+                    print('unfreeze_heads')
+                    print(unfreeze_heads)
                     for unfreeze_head in unfreeze_heads:
                         decoder.attentions[len(decoder.attentions)-1].q_lin[unfreeze_head].weight.requires_grad = True
                         decoder.attentions[len(decoder.attentions)-1].q_lin[unfreeze_head].bias.requires_grad = True
