@@ -544,7 +544,7 @@ class TransformerModel(nn.Module):
         # transformer layers
         for i in range(self.n_layers):
 
-            if getattr(self,'freeze_heads') is not None and max(range(self.n_layers)) == i:
+            if hasattr(self,'freeze_heads') and max(range(self.n_layers)) == i:
                 attn = self.attentions[i](tensor, attn_mask, cache=cache)
                 tensor = tensor + attn
 
