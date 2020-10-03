@@ -485,6 +485,8 @@ class EncDecEvaluator(Evaluator):
             # generate translation - translate / convert to text
             if eval_bleu:
                 max_len = int(1.5 * len1.max().item() + 10)
+                if max_len > 512:
+                    continue # maximum generation length
                 if params.beam_size == 1:
                     generated, lengths = decoder.generate(enc1, len1, lang2_id, max_len=max_len)
                 else:
