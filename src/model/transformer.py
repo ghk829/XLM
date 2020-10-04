@@ -325,7 +325,7 @@ class MultiSegmentHeadAttention(nn.Module):
         scores.masked_fill_(mask, -float('inf'))                              # (bs, n_heads, qlen, klen)
 
         weights = F.softmax(scores.float(), dim=-1).type_as(scores)           # (bs, n_heads, qlen, klen)
-        # weights = F.dropout(weights, p=self.dropout, training=self.training)  # (bs, n_heads, qlen, klen)
+        weights = F.dropout(weights, p=self.dropout, training=self.training)  # (bs, n_heads, qlen, klen)
         context = torch.matmul(weights, v)                                    # (bs, n_heads, qlen, dim_per_head)
         context = unshape(context)                                            # (bs, qlen, dim)
 
@@ -544,60 +544,32 @@ class TransformerModel(nn.Module):
         # transformer layers
         for i in range(self.n_layers):
 
-            if hasattr(self,'freeze_heads') and max(range(self.n_layers)) == i:
-                attn = self.attentions[i](tensor, attn_mask, cache=cache)
-                tensor = tensor + attn
+            # self attention
+            attn = self.attentions[i](tensor, attn_mask, cache=cache)
+            attn = F.dropout(attn, p=self.dropout, training=self.training)
+            tensor = tensor + attn
+            tensor = self.layer_norm1[i](tensor)
 
-                # encoder attention (for decoder only)
-                if self.is_decoder and src_enc is not None:
-                    attn = self.encoder_attn[i](tensor, src_mask, kv=src_enc, cache=cache)
-                    #attn = F.dropout(attn, p=self.dropout, training=self.training)
-                    tensor = tensor + attn
-                    #tensor = self.layer_norm15[i](tensor)
-
-                # FFN
-                if ('%i_in' % i) in self.memories:
-                    tensor = tensor + self.memories['%i_in' % i](tensor)
-                else:
-                    tensor = tensor + self.ffns[i](tensor)
-                tensor = self.layer_norm2[i](tensor)
-
-                # memory
-                if ('%i_after' % i) in self.memories:
-                    tensor = tensor + self.memories['%i_after' % i](tensor)
-                # TODO: add extra layer norm here?
-
-                tensor *= mask.unsqueeze(-1).to(tensor.dtype)
-
-
-            else:
-
-                # self attention
-                attn = self.attentions[i](tensor, attn_mask, cache=cache)
+            # encoder attention (for decoder only)
+            if self.is_decoder and src_enc is not None:
+                attn = self.encoder_attn[i](tensor, src_mask, kv=src_enc, cache=cache)
                 attn = F.dropout(attn, p=self.dropout, training=self.training)
                 tensor = tensor + attn
-                tensor = self.layer_norm1[i](tensor)
+                tensor = self.layer_norm15[i](tensor)
 
-                # encoder attention (for decoder only)
-                if self.is_decoder and src_enc is not None:
-                    attn = self.encoder_attn[i](tensor, src_mask, kv=src_enc, cache=cache)
-                    attn = F.dropout(attn, p=self.dropout, training=self.training)
-                    tensor = tensor + attn
-                    tensor = self.layer_norm15[i](tensor)
+            # FFN
+            if ('%i_in' % i) in self.memories:
+                tensor = tensor + self.memories['%i_in' % i](tensor)
+            else:
+                tensor = tensor + self.ffns[i](tensor)
+            tensor = self.layer_norm2[i](tensor)
 
-                # FFN
-                if ('%i_in' % i) in self.memories:
-                    tensor = tensor + self.memories['%i_in' % i](tensor)
-                else:
-                    tensor = tensor + self.ffns[i](tensor)
-                tensor = self.layer_norm2[i](tensor)
+            # memory
+            if ('%i_after' % i) in self.memories:
+                tensor = tensor + self.memories['%i_after' % i](tensor)
+            # TODO: add extra layer norm here?
 
-                # memory
-                if ('%i_after' % i) in self.memories:
-                    tensor = tensor + self.memories['%i_after' % i](tensor)
-                # TODO: add extra layer norm here?
-
-                tensor *= mask.unsqueeze(-1).to(tensor.dtype)
+            tensor *= mask.unsqueeze(-1).to(tensor.dtype)
 
         # update cache length
         if cache is not None:
