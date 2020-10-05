@@ -55,4 +55,4 @@ class ConcreteGate(nn.Module):
 
         penalty = self.get_penality()
 
-        return gates * x, penalty
+        return torch.einsum('abcd,b->abcd',x,gates), penalty
