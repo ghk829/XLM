@@ -461,6 +461,8 @@ class TransformerModel(nn.Module):
         self.dropout = params.dropout
         self.attention_dropout = params.attention_dropout
 
+        self.l0_weight = getattr(params,'l0_weight',None)
+
         assert self.dim % self.n_heads == 0, 'transformer dim must be a multiple of n_heads'
 
         # embeddings
@@ -491,8 +493,8 @@ class TransformerModel(nn.Module):
                 self.memories['%i_%s' % (layer_id, pos)] = HashingMemory.build(self.dim, self.dim, params)
 
         for layer_id in range(self.n_layers):
-            if layer_id == max(range(self.n_layers)):
-                if params.freeze_heads != '':
+            if params.freeze_heads != '':
+                if layer_id == max(range(self.n_layers)):
                     attention = MultiSegmentHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout)
                     freeze_heads = list(map(int,params.freeze_heads.split(',')))
                     self.freeze_heads = freeze_heads
@@ -508,6 +510,9 @@ class TransformerModel(nn.Module):
                             attention.v_lin[freeze_head].bias.requires_grad = False
                 else:
                     attention = MultiHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout)
+
+            elif self.l0_weight is not None:
+                attention = MultiConcreteHeadAttention(self.n_heads,self.dim,dropout=self.attention_dropout)
             else:
                 attention = MultiHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout)
 
@@ -618,11 +623,17 @@ class TransformerModel(nn.Module):
         tensor = F.dropout(tensor, p=self.dropout, training=self.training)
         tensor *= mask.unsqueeze(-1).to(tensor.dtype)
 
+        if self.l0_weight is not None:
+            reg_loss =0
+
         # transformer layers
         for i in range(self.n_layers):
 
             # self attention
-            attn = self.attentions[i](tensor, attn_mask, cache=cache)
+            if self.l0_weight is not None:
+                attn, reg_loss = self.attentions[i](tensor, attn_mask, cache=cache)
+            else:
+                attn = self.attentions[i](tensor, attn_mask, cache=cache)
             attn = F.dropout(attn, p=self.dropout, training=self.training)
             tensor = tensor + attn
             tensor = self.layer_norm1[i](tensor)
@@ -654,6 +665,9 @@ class TransformerModel(nn.Module):
 
         # move back sequence length to dimension 0
         tensor = tensor.transpose(0, 1)
+
+        if self.l0_weight is not None:
+            return tensor, reg_loss
 
         return tensor
 

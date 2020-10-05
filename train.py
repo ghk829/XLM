@@ -217,6 +217,10 @@ def get_parser():
 
     # specialize-heads
     parser.add_argument('--freeze_heads',type=str,default='')
+
+    # pruning-heads
+    parser.add_argument('--l0_weight',type=float,default=0)
+
     return parser
 
 

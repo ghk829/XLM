@@ -121,7 +121,8 @@ class Trainer(object):
             [('PC-%s-%s' % (l1, l2), []) for l1, l2 in params.pc_steps] +
             [('AE-%s' % lang, []) for lang in params.ae_steps] +
             [('MT-%s-%s' % (l1, l2), []) for l1, l2 in params.mt_steps] +
-            [('BT-%s-%s-%s' % (l1, l2, l3), []) for l1, l2, l3 in params.bt_steps]
+            [('BT-%s-%s-%s' % (l1, l2, l3), []) for l1, l2, l3 in params.bt_steps] +
+            ['l0-loss']
         )
         self.last_time = time.time()
 
@@ -848,7 +849,10 @@ class EncDecTrainer(Trainer):
         x1, len1, langs1, x2, len2, langs2, y = to_cuda(x1, len1, langs1, x2, len2, langs2, y)
 
         # encode source sentence
-        enc1 = self.encoder('fwd', x=x1, lengths=len1, langs=langs1, causal=False)
+        if params.l0_weight != 0:
+            enc1, reg_loss = self.encoder('fwd', x=x1, lengths=len1, langs=langs1, causal=False)
+        else:
+            enc1 = self.encoder('fwd', x=x1, lengths=len1, langs=langs1, causal=False)
         enc1 = enc1.transpose(0, 1)
 
         # decode target sentence
@@ -858,6 +862,10 @@ class EncDecTrainer(Trainer):
         _, loss = self.decoder('predict', tensor=dec2, pred_mask=pred_mask, y=y, get_scores=False)
         self.stats[('AE-%s' % lang1) if lang1 == lang2 else ('MT-%s-%s' % (lang1, lang2))].append(loss.item())
         loss = lambda_coeff * loss
+
+        if params.l0_weight != 0:
+            self.stats['l0-loss'].append(reg_loss.item())
+            loss += params.l0_weight * reg_loss.item()
 
         # optimize
         self.optimize(loss)
