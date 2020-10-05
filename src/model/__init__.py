@@ -215,8 +215,8 @@ def build_model(params, dico):
                     freeze_heads = list(map(int, params.freeze_heads.split(',')))
                     unfreeze_heads = set(range(params.n_heads)) - set(freeze_heads)
                     unfreeze_heads = list(unfreeze_heads)
-                    print('unfreeze_heads')
-                    print(unfreeze_heads)
+                    logger.info('unfreeze_heads')
+                    logger.info(unfreeze_heads)
                     for unfreeze_head in unfreeze_heads:
                         decoder.attentions[len(decoder.attentions)-1].q_lin[unfreeze_head].weight.requires_grad = True
                         decoder.attentions[len(decoder.attentions)-1].q_lin[unfreeze_head].bias.requires_grad = True
