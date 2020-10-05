@@ -403,10 +403,10 @@ class MultiConcreteHeadAttention(nn.Module):
         weights = F.softmax(scores.float(), dim=-1).type_as(scores)           # (bs, n_heads, qlen, klen)
         weights = F.dropout(weights, p=self.dropout, training=self.training)  # (bs, n_heads, qlen, klen)
         context = torch.matmul(weights, v)                                    # (bs, n_heads, qlen, dim_per_head)
-        context = self.concrete_gate(context)
+        context, reg_loss = self.concrete_gate(context)
         context = unshape(context)                                      # (bs, qlen, dim)
 
-        return self.out_lin(context)
+        return self.out_lin(context), reg_loss
 
 
 class TransformerFFN(nn.Module):
