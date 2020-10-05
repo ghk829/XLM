@@ -20,7 +20,7 @@ class ConcreteGate(nn.Module):
         super(ConcreteGate, self).__init__()
 
         self.n_heads = n_heads
-        self.loc = nn.Parameter(torch.zeros(n_heads).uniform_())
+        self.loc = nn.Parameter(torch.zeros(n_heads).normal_(std=0.01))
         self.temp = temp
 
         self.gamma = -epsilon  # lower limit
