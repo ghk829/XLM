@@ -43,7 +43,7 @@ class ConcreteGate(nn.Module):
     def get_penality(self, x=None):
         # l0
         if self.training:
-            penalty = F.sigmoid(self.loc - self.temp * self.gamma_zeta_ratio).sum()
+            penalty = F.sigmoid(self.loc - self.temp * self.gamma_zeta_ratio).mean()
         else:
             penalty = 0
 
