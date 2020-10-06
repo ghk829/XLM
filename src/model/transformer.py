@@ -511,7 +511,7 @@ class TransformerModel(nn.Module):
                 else:
                     attention = MultiHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout)
 
-            elif self.l0_weight is not None:
+            elif self.l0_weight is not None and (self.is_encoder or (self.is_decoder and params.dec_self)):
                 attention = MultiConcreteHeadAttention(self.n_heads,self.dim,dropout=self.attention_dropout)
             else:
                 attention = MultiHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout)

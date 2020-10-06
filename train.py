@@ -220,6 +220,7 @@ def get_parser():
 
     # pruning-heads
     parser.add_argument('--l0_weight',type=float,default=0)
+    parser.add_argument('--dec_self', type=bool_flag, default=False)
 
     return parser
 
