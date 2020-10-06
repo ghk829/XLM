@@ -864,8 +864,9 @@ class EncDecTrainer(Trainer):
         loss = lambda_coeff * loss
 
         if params.l0_weight != 0:
-            self.stats['l0-loss'].append(reg_loss.item())
-            loss += params.l0_weight * reg_loss.item()
+            reg_loss = params.l0_weight * reg_loss.item()
+            self.stats['l0-loss'].append(reg_loss)
+            loss +=reg_loss
 
         # optimize
         self.optimize(loss)
