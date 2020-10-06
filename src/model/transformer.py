@@ -632,7 +632,8 @@ class TransformerModel(nn.Module):
 
             # self attention
             if self.l0_weight is not None and (self.is_encoder or (self.is_decoder and self.dec_self)):
-                attn, reg_loss = self.attentions[i](tensor, attn_mask, cache=cache)
+                attn, _reg_loss = self.attentions[i](tensor, attn_mask, cache=cache)
+                reg_loss+=_reg_loss
             else:
                 attn = self.attentions[i](tensor, attn_mask, cache=cache)
             attn = F.dropout(attn, p=self.dropout, training=self.training)
