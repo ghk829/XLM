@@ -52,8 +52,9 @@ class ConcreteGate(nn.Module):
 
         gates = self.get_gates()
 
-        gates = (gates > 0.5).float() # pruning : https://www.aclweb.org/anthology/P19-1580/
+        hard_gates = (gates > 0.5).float() # pruning : https://www.aclweb.org/anthology/P19-1580/
 
+        gates += (hard_gates-gates).detach()
         penalty = self.get_penality()
 
         return torch.einsum('abcd,b->abcd',x,gates), penalty
