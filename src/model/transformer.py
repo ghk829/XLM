@@ -631,7 +631,7 @@ class TransformerModel(nn.Module):
         for i in range(self.n_layers):
 
             # self attention
-            if self.l0_weight is not None:
+            if self.l0_weight is not None and (self.is_encoder or (self.is_decoder and self.dec_self)):
                 attn, reg_loss = self.attentions[i](tensor, attn_mask, cache=cache)
             else:
                 attn = self.attentions[i](tensor, attn_mask, cache=cache)
