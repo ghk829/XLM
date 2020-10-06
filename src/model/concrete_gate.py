@@ -30,7 +30,6 @@ class ConcreteGate(nn.Module):
     def get_gates(self):
 
         gates = self._get_gates()
-        gates = torch.clamp(gates,0,1) # deactivate heads under 0
         #hard_gates = (gates > 0.5).float()  # binarize
         #gates += (hard_gates - gates).detach()
 
