@@ -30,8 +30,8 @@ class ConcreteGate(nn.Module):
     def get_gates(self):
 
         gates = self._get_gates()
-        hard_gates = (gates > 0.5).float()  # pruning : https://www.aclweb.org/anthology/P19-1580/
-        gates += (hard_gates - gates).detach()
+        #hard_gates = (gates > 0.5).float()  # binarize
+        #gates += (hard_gates - gates).detach()
 
         return gates
 
