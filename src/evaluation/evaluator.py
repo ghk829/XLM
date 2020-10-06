@@ -464,7 +464,10 @@ class EncDecEvaluator(Evaluator):
             x1, len1, langs1, x2, len2, langs2, y = to_cuda(x1, len1, langs1, x2, len2, langs2, y)
 
             # encode source sentence
-            enc1 = encoder('fwd', x=x1, lengths=len1, langs=langs1, causal=False)
+            if params.l0_weight != 0:
+                enc1, reg_loss = self.encoder('fwd', x=x1, lengths=len1, langs=langs1, causal=False)
+            else:
+                enc1 = self.encoder('fwd', x=x1, lengths=len1, langs=langs1, causal=False)
             enc1 = enc1.transpose(0, 1)
             enc1 = enc1.half() if params.fp16 else enc1
 
