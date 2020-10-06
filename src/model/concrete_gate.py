@@ -30,9 +30,8 @@ class ConcreteGate(nn.Module):
     def get_gates(self):
 
         if self.training:
-            uniform = torch.zeros(self.n_heads)
-            uniform.uniform_()
-            u = uniform
+            u = torch.zeros(self.n_heads, deivce=self.loc.device)
+            u.uniform_()
             s = F.sigmoid((torch.log(u) - torch.log(1 - u) + self.loc) / self.temp)
             s = s * (self.zeta - self.gamma) + self.gamma # s_bar
         else:

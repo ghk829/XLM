@@ -462,6 +462,7 @@ class TransformerModel(nn.Module):
         self.attention_dropout = params.attention_dropout
 
         self.l0_weight = getattr(params,'l0_weight',None)
+        self.dec_self = getattr(params,'dec_self',False)
 
         assert self.dim % self.n_heads == 0, 'transformer dim must be a multiple of n_heads'
 
@@ -511,7 +512,7 @@ class TransformerModel(nn.Module):
                 else:
                     attention = MultiHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout)
 
-            elif self.l0_weight is not None and (self.is_encoder or (self.is_decoder and params.dec_self)):
+            elif self.l0_weight is not None and (self.is_encoder or (self.is_decoder and self.dec_self)):
                 attention = MultiConcreteHeadAttention(self.n_heads,self.dim,dropout=self.attention_dropout)
             else:
                 attention = MultiHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout)
@@ -666,7 +667,7 @@ class TransformerModel(nn.Module):
         # move back sequence length to dimension 0
         tensor = tensor.transpose(0, 1)
 
-        if self.l0_weight is not None:
+        if self.l0_weight is not None and (self.is_encoder or (self.is_decoder and self.dec_self)):
             return tensor, reg_loss
 
         return tensor
