@@ -202,7 +202,7 @@ def build_model(params, dico):
                             #dec_reload[name % i] = decoder.state_dict()[name % i]
 
                 if not is_adapt:
-                    decoder.load_state_dict(dec_reload)
+                    decoder.load_state_dict(dec_reload, strict=False)
                 else:
                     dec_reload = {k: v for k, v in dec_reload.items() if
                                   k not in ['embeddings.weight', 'pred_layer.proj.weight', 'pred_layer.proj.bias']}
