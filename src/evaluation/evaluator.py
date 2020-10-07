@@ -471,8 +471,12 @@ class EncDecEvaluator(Evaluator):
             enc1 = enc1.transpose(0, 1)
             enc1 = enc1.half() if params.fp16 else enc1
 
-            # decode target sentence
-            dec2 = decoder('fwd', x=x2, lengths=len2, langs=langs2, causal=True, src_enc=enc1, src_len=len1)
+            if params.l0_weight != 0 and params.dec_self:
+                dec2, _reg_loss = self.decoder('fwd', x=x2, lengths=len2, langs=langs2, causal=True, src_enc=enc1,
+                                               src_len=len1)
+                reg_loss += _reg_loss
+            else:
+                dec2 = self.decoder('fwd', x=x2, lengths=len2, langs=langs2, causal=True, src_enc=enc1, src_len=len1)
 
             # loss
             word_scores, loss = decoder('predict', tensor=dec2, pred_mask=pred_mask, y=y, get_scores=True)
