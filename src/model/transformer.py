@@ -747,6 +747,10 @@ class TransformerModel(nn.Module):
                 src_len=src_len,
                 cache=cache
             )
+
+            if self.l0_weight is not None and (self.is_encoder or (self.is_decoder and self.dec_self)):
+                tensor, reg_loss = tensor
+
             assert tensor.size() == (1, bs, self.dim), (cur_len, max_len, src_enc.size(), tensor.size(), (1, bs, self.dim))
             tensor = tensor.data[-1, :, :].type_as(src_enc)  # (bs, dim)
             scores = self.pred_layer.get_scores(tensor)      # (bs, n_words)
