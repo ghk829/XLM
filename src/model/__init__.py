@@ -163,7 +163,7 @@ def build_model(params, dico):
                     enc_reload = {k[len('module.'):]: v for k, v in enc_reload.items()}
 
                 if not is_adapt:
-                    encoder.load_state_dict(enc_reload)
+                    encoder.load_state_dict(enc_reload,strict=False)
                 else:
                     enc_reload = {k: v for k, v in enc_reload.items() if
                                   k not in ['embeddings.weight', 'pred_layer.proj.weight', 'pred_layer.proj.bias']}
