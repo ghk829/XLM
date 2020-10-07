@@ -522,8 +522,8 @@ class TransformerModel(nn.Module):
             if self.is_decoder:
                 self.layer_norm15.append(nn.LayerNorm(self.dim, eps=1e-12))
 
-                if layer_id == max(range(self.n_layers)):
-                    if params.freeze_heads != '':
+                if params.freeze_heads != '':
+                    if layer_id == max(range(self.n_layers)):
                         attention = MultiSegmentHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout)
                         freeze_heads = list(map(int, params.freeze_heads.split(',')))
                         if freeze_heads[0] == -1:  # pretrain
@@ -536,8 +536,8 @@ class TransformerModel(nn.Module):
                                 attention.k_lin[freeze_head].bias.requires_grad = False
                                 attention.v_lin[freeze_head].weight.requires_grad = False
                                 attention.v_lin[freeze_head].bias.requires_grad = False
-                    else:
-                        attention = MultiHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout)
+                elif self.l0_weight is not None and (self.is_encoder or (self.is_decoder and self.dec_self)):
+                    attention = MultiConcreteHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout)
                 else:
                     attention = MultiHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout)
                 self.encoder_attn.append(attention)
