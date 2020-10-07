@@ -465,7 +465,7 @@ class EncDecEvaluator(Evaluator):
 
             # encode source sentence
             if params.l0_weight != 0:
-                enc1, reg_loss = self.encoder('fwd', x=x1, lengths=len1, langs=langs1, causal=False)
+                enc1, _reg_loss = self.encoder('fwd', x=x1, lengths=len1, langs=langs1, causal=False)
             else:
                 enc1 = self.encoder('fwd', x=x1, lengths=len1, langs=langs1, causal=False)
             enc1 = enc1.transpose(0, 1)
@@ -474,7 +474,6 @@ class EncDecEvaluator(Evaluator):
             if params.l0_weight != 0 and params.dec_self:
                 dec2, _reg_loss = self.decoder('fwd', x=x2, lengths=len2, langs=langs2, causal=True, src_enc=enc1,
                                                src_len=len1)
-                reg_loss += _reg_loss
             else:
                 dec2 = self.decoder('fwd', x=x2, lengths=len2, langs=langs2, causal=True, src_enc=enc1, src_len=len1)
 
