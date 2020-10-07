@@ -642,7 +642,12 @@ class TransformerModel(nn.Module):
 
             # encoder attention (for decoder only)
             if self.is_decoder and src_enc is not None:
-                attn = self.encoder_attn[i](tensor, src_mask, kv=src_enc, cache=cache)
+                if self.l0_weight is not None and (self.is_encoder or (self.is_decoder and self.dec_self)):
+                    attn, _reg_loss = self.encoder_attn[i](tensor, src_mask, kv=src_enc, cache=cache)
+                    reg_loss += _reg_loss
+                else:
+                    attn = self.encoder_attn[i](tensor, src_mask, kv=src_enc, cache=cache)
+
                 attn = F.dropout(attn, p=self.dropout, training=self.training)
                 tensor = tensor + attn
                 tensor = self.layer_norm15[i](tensor)
