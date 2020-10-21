@@ -571,3 +571,244 @@ def eval_moses_bleu(ref, hyp):
     else:
         logger.warning('Impossible to parse BLEU score! "%s"' % result)
         return -1
+
+
+class MultiDomainEvaluator(Evaluator):
+
+    def __init__(self, trainer, data, params):
+        """
+        Build encoder / decoder evaluator.
+        """
+        super().__init__(trainer, data, params)
+        self.encoder = trainer.encoder
+        self.decoder = trainer.decoder
+
+    def evaluate_mt(self, scores, data_set, lang1, lang2, eval_bleu):
+        """
+        Evaluate perplexity and next word prediction accuracy.
+        """
+        params = self.params
+        assert data_set in ['valid', 'test']
+        assert lang1 in params.langs
+        assert lang2 in params.langs
+
+        self.encoder.eval()
+        self.decoder.eval()
+        encoder = self.encoder.module if params.multi_gpu else self.encoder
+        decoder = self.decoder.module if params.multi_gpu else self.decoder
+
+        params = params
+        lang1_id = params.lang2id[lang1]
+        lang2_id = params.lang2id[lang2]
+
+        n_words = 0
+        xe_loss = 0
+        n_valid = 0
+
+        # only save states / evaluate usage on the validation set
+        eval_memory = params.use_memory and data_set == 'valid' and self.params.is_master
+        HashingMemory.EVAL_MEMORY = eval_memory
+        if eval_memory:
+            all_mem_att = {k: [] for k, _ in self.memory_list}
+
+        # store hypothesis to compute BLEU score
+        if eval_bleu:
+            hypothesis = []
+
+        for batch in self.get_iterator(data_set, lang1, lang2):
+
+            # generate batch
+            (x1, len1), (x2, len2) = batch
+            langs1 = x1.clone().fill_(lang1_id)
+            langs2 = x2.clone().fill_(lang2_id)
+
+            # target words to predict
+            alen = torch.arange(len2.max(), dtype=torch.long, device=len2.device)
+            pred_mask = alen[:, None] < len2[None] - 1  # do not predict anything given the last target word
+            y = x2[1:].masked_select(pred_mask[:-1])
+            assert len(y) == (len2 - 1).sum().item()
+
+            # cuda
+            x1, len1, langs1, x2, len2, langs2, y = to_cuda(x1, len1, langs1, x2, len2, langs2, y)
+
+            # encode source sentence
+            if params.l0_weight != 0:
+                enc1, _reg_loss = self.encoder('fwd', x=x1, lengths=len1, langs=langs1, causal=False)
+            else:
+                enc1 = self.encoder('fwd', x=x1, lengths=len1, langs=langs1, causal=False)
+            enc1 = enc1.transpose(0, 1)
+            enc1 = enc1.half() if params.fp16 else enc1
+
+            if params.l0_weight != 0 and params.dec_self:
+                dec2, _reg_loss = self.decoder('fwd', x=x2, lengths=len2, langs=langs2, causal=True, src_enc=enc1,
+                                               src_len=len1)
+            else:
+                dec2 = self.decoder('fwd', x=x2, lengths=len2, langs=langs2, causal=True, src_enc=enc1, src_len=len1)
+
+            # loss
+            word_scores, loss = decoder('predict', tensor=dec2, pred_mask=pred_mask, y=y, get_scores=True)
+
+            # update stats
+            n_words += y.size(0)
+            xe_loss += loss.item() * len(y)
+            n_valid += (word_scores.max(1)[1] == y).sum().item()
+            if eval_memory:
+                for k, v in self.memory_list:
+                    all_mem_att[k].append((v.last_indices, v.last_scores))
+
+            # generate translation - translate / convert to text
+            if eval_bleu:
+                max_len = int(1.5 * len1.max().item() + 10)
+                if max_len > 512:
+                    continue # maximum generation length
+                if params.beam_size == 1:
+                    generated, lengths = decoder.generate(enc1, len1, lang2_id, max_len=max_len)
+                else:
+                    generated, lengths = decoder.generate_beam(
+                        enc1, len1, lang2_id, beam_size=params.beam_size,
+                        length_penalty=params.length_penalty,
+                        early_stopping=params.early_stopping,
+                        max_len=max_len
+                    )
+                hypothesis.extend(convert_to_text(generated, lengths, self.dico, params))
+
+        # compute perplexity and prediction accuracy
+        scores['%s_%s-%s_mt_ppl' % (data_set, lang1, lang2)] = np.exp(xe_loss / n_words)
+        scores['%s_%s-%s_mt_acc' % (data_set, lang1, lang2)] = 100. * n_valid / n_words
+
+        # compute memory usage
+        if eval_memory:
+            for mem_name, mem_att in all_mem_att.items():
+                eval_memory_usage(scores, '%s_%s-%s_%s' % (data_set, lang1, lang2, mem_name), mem_att, params.mem_size)
+
+        # compute BLEU
+        if eval_bleu:
+
+            # hypothesis / reference paths
+            hyp_name = 'hyp{0}.{1}-{2}.{3}.txt'.format(scores['epoch'], lang1, lang2, data_set)
+            hyp_path = os.path.join(params.hyp_path, hyp_name)
+            ref_path = params.ref_paths[(lang1, lang2, data_set)]
+
+            # export sentences to hypothesis file / restore BPE segmentation
+            with open(hyp_path, 'w', encoding='utf-8') as f:
+                f.write('\n'.join(hypothesis) + '\n')
+            restore_segmentation(hyp_path)
+
+            # evaluate BLEU score
+            bleu = eval_moses_bleu(ref_path, hyp_path)
+            logger.info("BLEU %s %s : %f" % (hyp_path, ref_path, bleu))
+            scores['%s_%s-%s_mt_bleu' % (data_set, lang1, lang2)] = bleu
+
+    def update_language_sampler_multidomain(self, args, epoch):
+        """Update the distribution to sample languages """
+        # calculate gradient direction
+        # calculate dev grad
+        # Initialize dev data iterator
+        self.model.train()
+        self.criterion.train()
+        self.zero_grad()
+
+        # #dev dataset x #train dataset
+        all_sim_list = []
+        valid_losses = [0 for _ in range(len(self.task.dataset('valid').datasets.keys()))]
+        valid_ntoks = [0 for _ in range(len(self.task.dataset('valid').datasets.keys()))]
+        train_losses = [0 for _ in range(len(self.task.dataset('train').datasets.keys()))]
+        train_ntoks = [0 for _ in range(len(self.task.dataset('train').datasets.keys()))]
+        for i, valid_key in enumerate(self.task.dataset('valid').datasets.keys()):
+            # for _ in range(self.args.loss_steps):
+            valid_sample = self.task.dataset('valid').get_sample_with_key(valid_key)
+            valid_sample = self._prepare_sample(valid_sample)
+            loss, sample_size, logging_output = self.task.train_step(
+                valid_sample, self.model, self.criterion, self.optimizer)
+            if sample_size > 0:
+                loss = loss / sample_size
+            valid_losses.append(loss)
+
+            self.optimizer.save_dev_grad()
+            self.zero_grad()
+            if self.cuda:
+                torch.cuda.empty_cache()
+            sim_list = []
+            for j, key in enumerate(self.task.dataset('train').datasets.keys()):
+                sample = self.task.dataset('train').get_sample_with_key(key)
+                sample = self._prepare_sample(sample)
+                # calculate gradient similarity
+                loss, sample_size, logging_output = self.task.train_step(
+                    sample, self.model, self.criterion, self.optimizer)
+                if sample_size > 0:
+                    loss = loss / sample_size
+                train_losses.append(loss)
+                sim, cur_grad_sim, prev_grad_sim = self.optimizer.get_grad_sim()
+                sim_list.append(sim)
+                self.zero_grad()
+                if self.cuda:
+                    torch.cuda.empty_cache()
+            all_sim_list.append(sim_list)
+        if args.pretrain_data_actor and not self.pretrained:
+            feature = torch.ones(1, len(self.task.dataset('train').datasets.keys()))
+            self.pretrained = True
+            self.pretrain_data_actor(feature)
+        # get rewards for languages based on different objectives
+        if self.args.utility_type == 'ave':
+            sim_list = np.mean(np.array(all_sim_list), axis=0).tolist()
+            print(sim_list)
+        elif self.args.utility_type == 'min-half':
+            # find the valid languages with max losses
+            # sort by loss, ascending order
+            if epoch >= args.switch_obj_epoch:
+                sorted_indices = np.argsort(valid_losses)
+                selected_indices = sorted_indices[len(valid_losses) // 2:]
+                val_keys = list(self.task.dataset('valid').datasets.keys())
+                for i, val_key in enumerate(val_keys):
+                    print(val_key, valid_losses[i])
+                print('selected keys:')
+                for k in selected_indices:
+                    print(val_keys[k], valid_losses[k])
+                selected_sim_list = []
+                for k, sim in enumerate(all_sim_list):
+                    if k in selected_indices:
+                        selected_sim_list.append(sim)
+                sim_list = np.mean(np.array(selected_sim_list), axis=0).tolist()
+            else:
+                sim_list = np.mean(np.array(all_sim_list), axis=0).tolist()
+            print(sim_list)
+        elif self.args.utility_type == 'max-half':
+            # find the valid languages with max losses
+            # sort by loss, ascending order
+            if epoch >= args.switch_obj_epoch:
+                sorted_indices = np.argsort(valid_losses)
+                selected_indices = sorted_indices[:len(valid_losses) // 2]
+                val_keys = list(self.task.dataset('valid').datasets.keys())
+                for i, val_key in enumerate(val_keys):
+                    print(val_keys[i], valid_losses[i])
+                print('selected keys:')
+                for k in selected_indices:
+                    print(val_keys[k], valid_losses[k])
+                selected_sim_list = []
+                for k, sim in enumerate(all_sim_list):
+                    if k in selected_indices:
+                        selected_sim_list.append(sim)
+                sim_list = np.mean(np.array(selected_sim_list), axis=0).tolist()
+            else:
+                sim_list = np.mean(np.array(all_sim_list), axis=0).tolist()
+            print(sim_list)
+        feature = torch.ones(1, len(self.task.dataset('train').datasets.keys()))
+        grad_scale = torch.FloatTensor(sim_list).view(1, -1)
+
+        if self.cuda:
+            feature = feature.cuda()
+            grad_scale = grad_scale.cuda()
+        for _ in range(self.args.data_actor_optim_step):
+            a_logits = self.data_actor.forward(feature)
+            loss = -torch.nn.functional.log_softmax(a_logits, dim=-1)
+            if self.args.scale_reward:
+                loss = loss * torch.softmax(a_logits, dim=-1).data
+            loss = (loss * grad_scale).sum()
+            loss.backward()
+            self.data_optimizer.step()
+            self.data_optimizer.zero_grad()
+        with torch.no_grad():
+            a_logits = self.data_actor.forward(feature)
+            prob = torch.nn.functional.softmax(a_logits, dim=-1)
+            sim_list = [i for i in prob.data.view(-1).cpu().numpy()]
+        self.task.dataset('train').update_sampling_distribution(sim_list)

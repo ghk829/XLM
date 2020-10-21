@@ -14,8 +14,8 @@ from src.data.loader import check_data_params, load_data
 from src.utils import bool_flag, initialize_exp, set_sampling_probs, shuf_order
 from src.model import check_model_params, build_model
 from src.model.memory import HashingMemory
-from src.trainer import SingleTrainer, EncDecTrainer
-from src.evaluation.evaluator import SingleEvaluator, EncDecEvaluator
+from src.trainer import SingleTrainer, EncDecTrainer, MultiDomainTrainer
+from src.evaluation.evaluator import SingleEvaluator, EncDecEvaluator, MultiDomainEvaluator
 
 
 def get_parser():
@@ -222,6 +222,9 @@ def get_parser():
     parser.add_argument('--l0_weight',type=float,default=0)
     parser.add_argument('--dec_self', type=bool_flag, default=False)
 
+    # adaptive sampling ratio
+    parser.add_argument('--domains',types=str,default='')
+
     return parser
 
 
@@ -249,6 +252,9 @@ def main(params):
     if params.encoder_only:
         trainer = SingleTrainer(model, data, params)
         evaluator = SingleEvaluator(trainer, data, params)
+    elif params.domains:
+        trainer = MultiDomainTrainer(encoder, decoder, data, params)
+        evaluator = MultiDomainEvaluator(trainer, data, params)
     else:
         trainer = EncDecTrainer(encoder, decoder, data, params)
         evaluator = EncDecEvaluator(trainer, data, params)

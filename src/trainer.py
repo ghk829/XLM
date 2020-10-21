@@ -948,3 +948,117 @@ class EncDecTrainer(Trainer):
         self.n_sentences += params.batch_size
         self.stats['processed_s'] += len1.size(0)
         self.stats['processed_w'] += (len1 - 1).sum().item()
+
+
+class MultiDomainTrainer(Trainer):
+
+    def __init__(self, encoder, decoder, data, params):
+
+        self.MODEL_NAMES = ['encoder', 'decoder']
+
+        # model / data / params
+        self.encoder = encoder
+        self.decoder = decoder
+        self.data = data
+        self.params = params
+
+        super().__init__(data, params)
+
+    def mt_step(self, lang1, lang2, lambda_coeff):
+        """
+        Machine translation step.
+        Can also be used for denoising auto-encoding.
+        """
+        assert lambda_coeff >= 0
+        if lambda_coeff == 0:
+            return
+        params = self.params
+        self.encoder.train()
+        self.decoder.train()
+
+        lang1_id = params.lang2id[lang1]
+        lang2_id = params.lang2id[lang2]
+
+        # generate batch
+        (x1, len1), (x2, len2) = self.get_batch('mt', lang1, lang2)
+        langs1 = x1.clone().fill_(lang1_id)
+        langs2 = x2.clone().fill_(lang2_id)
+
+        # target words to predict
+        alen = torch.arange(len2.max(), dtype=torch.long, device=len2.device)
+        pred_mask = alen[:, None] < len2[None] - 1  # do not predict anything given the last target word
+        y = x2[1:].masked_select(pred_mask[:-1])
+        assert len(y) == (len2 - 1).sum().item()
+
+        # cuda
+        x1, len1, langs1, x2, len2, langs2, y = to_cuda(x1, len1, langs1, x2, len2, langs2, y)
+
+        reg_loss = 0
+        # encode source sentence
+        if params.l0_weight != 0:
+            enc1, _reg_loss = self.encoder('fwd', x=x1, lengths=len1, langs=langs1, causal=False)
+            reg_loss+=_reg_loss
+        else:
+            enc1 = self.encoder('fwd', x=x1, lengths=len1, langs=langs1, causal=False)
+        enc1 = enc1.transpose(0, 1)
+
+        # decode target sentence
+        if params.l0_weight != 0 and params.dec_self:
+            dec2, _reg_loss = self.decoder('fwd', x=x2, lengths=len2, langs=langs2, causal=True, src_enc=enc1, src_len=len1)
+            reg_loss += _reg_loss
+        else:
+            dec2 = self.decoder('fwd', x=x2, lengths=len2, langs=langs2, causal=True, src_enc=enc1, src_len=len1)
+
+
+        # loss
+        _, loss = self.decoder('predict', tensor=dec2, pred_mask=pred_mask, y=y, get_scores=False)
+        self.stats[('AE-%s' % lang1) if lang1 == lang2 else ('MT-%s-%s' % (lang1, lang2))].append(loss.item())
+        loss = lambda_coeff * loss
+
+        if params.l0_weight != 0:
+            self.stats['l0-loss'].append(params.l0_weight * reg_loss.item())
+            loss +=reg_loss
+
+        # optimize
+        self.optimize(loss)
+
+        # number of processed sentences / words
+        self.n_sentences += params.batch_size
+        self.stats['processed_s'] += len2.size(0)
+        self.stats['processed_w'] += (len2 - 1).sum().item()
+
+
+    def get_batch(self, iter_name, lang1, lang2=None, domain='wmt'):
+        """
+        Return a batch of sentences from a dataset.
+        """
+        assert lang1 in self.params.langs
+        assert lang2 is None or lang2 in self.params.langs
+        logger.info(f'DOMAIN is {domain}')
+        iterator = self.iterators.get((iter_name, lang1, lang2), None)
+        if iterator is None:
+            iterator = self.get_iterator(iter_name, lang1, lang2, domain)
+        try:
+            x = next(iterator)
+        except StopIteration:
+            domain = self.domains[self.domains.index(domain) + 1]
+            iterator = self.get_iterator(iter_name, lang1, lang2, domain)
+            x = next(iterator)
+        return x if lang2 is None or lang1 < lang2 else x[::-1]
+
+
+    def get_iterator(self, iter_name, lang1, lang2, domain):
+        """
+        Create a new iterator for a dataset.
+        """
+        logger.info("Creating new training data iterator (%s) ..." % ','.join([str(x) for x in [iter_name, lang1, lang2] if x is not None]))
+
+        _lang1, _lang2 = (lang1, lang2) if lang1 < lang2 else (lang2, lang1)
+        iterator = self.data['para'][(_lang1, _lang2, domain)]['train'].get_iterator(
+            shuffle=True,
+            group_by_size=self.params.group_by_size,
+            n_sentences=-1,
+        )
+
+        self.iterators[(iter_name, lang1, lang2, domain)] = iterator
+        return iterator
