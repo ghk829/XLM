@@ -1027,7 +1027,6 @@ class MultiDomainTrainer(Trainer):
         self.stats['processed_s'] += len2.size(0)
         self.stats['processed_w'] += (len2 - 1).sum().item()
 
-
     def get_batch(self, iter_name, lang1, lang2=None, domain='wmt'):
         """
         Return a batch of sentences from a dataset.
@@ -1045,7 +1044,6 @@ class MultiDomainTrainer(Trainer):
             iterator = self.get_iterator(iter_name, lang1, lang2, domain)
             x = next(iterator)
         return x if lang2 is None or lang1 < lang2 else x[::-1]
-
 
     def get_iterator(self, iter_name, lang1, lang2, domain):
         """
