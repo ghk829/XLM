@@ -225,7 +225,7 @@ def load_para_data(params, data):
     logger.info("")
 
 
-def load_para_data_with_domain(params, data):
+def load_para_data_with_domain(params, data, prior_ratios):
     """
     Load parallel data.
     """
@@ -233,7 +233,7 @@ def load_para_data_with_domain(params, data):
 
     required_para_train = set(params.clm_steps + params.mlm_steps + params.pc_steps + params.mt_steps)
 
-    for domain in params.domains:
+    for ratio, domain in zip(prior_ratios, params.domains):
 
         for src, tgt in params.para_dataset.keys():
 
@@ -265,6 +265,7 @@ def load_para_data_with_domain(params, data):
                 dataset = DomainParallelDataset(
                     src_data['sentences'], src_data['positions'],
                     tgt_data['sentences'], tgt_data['positions'],
+                    ratio,
                     params
                 )
 
@@ -393,6 +394,7 @@ def check_data_params(params):
             if src < tgt and ((src, tgt) in required_para or (tgt, src) in required_para)
             for domain in params.domain
         }
+        # @TODO : params.prior_ratio 구현
 
 
 
@@ -425,7 +427,11 @@ def load_data(params):
 
     # parallel datasets
     if params.domains:
-        load_para_data_with_domain(params,data)
+
+        prior_ratios = params.prior_ratios
+        # prior_ratios = [ 1 for _ in range(len(params.domains))]
+        # prior_ratios = [ ratio/sum(prior_ratios) for ratio in prior_ratios]
+        load_para_data_with_domain(params,data, prior_ratios)
     else:
         load_para_data(params, data)
 

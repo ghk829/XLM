@@ -224,6 +224,9 @@ def get_parser():
 
     # adaptive sampling ratio
     parser.add_argument('--domains',types=str,default='')
+    parser.add_argument('data_actor_lr',type=float,default=0.01)
+    parser.add_argument('data_actor_optim_step',type=int,default=1)
+    parser.add_argument('scale_reward',type=bool_flag,default=True)
 
     return parser
 
@@ -304,6 +307,9 @@ def main(params):
                 trainer.bt_step(lang1, lang2, lang3, params.lambda_bt)
 
             trainer.iter()
+
+            if params.domains:
+                trainer.update_language_sampler_multidomain()
 
         logger.info("============ End of epoch %i ============" % trainer.epoch)
 

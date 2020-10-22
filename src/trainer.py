@@ -15,6 +15,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 from torch.nn.utils import clip_grad_norm_
+from torch.autograd import grad
 import apex
 
 from .optim import get_optimizer
@@ -22,7 +23,7 @@ from .utils import to_cuda, concat_batches, find_modules
 from .utils import parse_lambda_config, update_lambdas
 from .model.memory import HashingMemory
 from .model.transformer import TransformerFFN
-
+from .model.data_actor import BaseActor
 
 logger = getLogger()
 
@@ -961,6 +962,17 @@ class MultiDomainTrainer(Trainer):
         self.decoder = decoder
         self.data = data
         self.params = params
+        self.domains = params.domains
+
+        self.p = params.prior_ratios
+
+        from itertools import cycle
+        self.domain_cycle = cycle(self.domains)
+
+        data_actor = BaseActor(len(params.domains))
+        self.data_actor = data_actor.cuda()
+        self.data_optimizer = torch.optim.Adam([p for p in self.data_actor.parameters() if p.requires_grad],
+                                               lr=params.data_actor_lr)
 
         super().__init__(data, params)
 
@@ -995,29 +1007,17 @@ class MultiDomainTrainer(Trainer):
 
         reg_loss = 0
         # encode source sentence
-        if params.l0_weight != 0:
-            enc1, _reg_loss = self.encoder('fwd', x=x1, lengths=len1, langs=langs1, causal=False)
-            reg_loss+=_reg_loss
-        else:
-            enc1 = self.encoder('fwd', x=x1, lengths=len1, langs=langs1, causal=False)
+        enc1 = self.encoder('fwd', x=x1, lengths=len1, langs=langs1, causal=False)
         enc1 = enc1.transpose(0, 1)
 
         # decode target sentence
-        if params.l0_weight != 0 and params.dec_self:
-            dec2, _reg_loss = self.decoder('fwd', x=x2, lengths=len2, langs=langs2, causal=True, src_enc=enc1, src_len=len1)
-            reg_loss += _reg_loss
-        else:
-            dec2 = self.decoder('fwd', x=x2, lengths=len2, langs=langs2, causal=True, src_enc=enc1, src_len=len1)
+        dec2 = self.decoder('fwd', x=x2, lengths=len2, langs=langs2, causal=True, src_enc=enc1, src_len=len1)
 
 
         # loss
         _, loss = self.decoder('predict', tensor=dec2, pred_mask=pred_mask, y=y, get_scores=False)
         self.stats[('AE-%s' % lang1) if lang1 == lang2 else ('MT-%s-%s' % (lang1, lang2))].append(loss.item())
         loss = lambda_coeff * loss
-
-        if params.l0_weight != 0:
-            self.stats['l0-loss'].append(params.l0_weight * reg_loss.item())
-            loss +=reg_loss
 
         # optimize
         self.optimize(loss)
@@ -1027,20 +1027,63 @@ class MultiDomainTrainer(Trainer):
         self.stats['processed_s'] += len2.size(0)
         self.stats['processed_w'] += (len2 - 1).sum().item()
 
+    def mt_step_by_domain(self, lang1, lang2, batch):
+        """
+        Machine translation step.
+        Can also be used for denoising auto-encoding.
+        """
+
+        params = self.params
+        self.encoder.train()
+        self.decoder.train()
+
+        lang1_id = params.lang2id[lang1]
+        lang2_id = params.lang2id[lang2]
+
+        # generate batch
+        (x1, len1), (x2, len2) = batch
+        langs1 = x1.clone().fill_(lang1_id)
+        langs2 = x2.clone().fill_(lang2_id)
+
+        # target words to predict
+        alen = torch.arange(len2.max(), dtype=torch.long, device=len2.device)
+        pred_mask = alen[:, None] < len2[None] - 1  # do not predict anything given the last target word
+        y = x2[1:].masked_select(pred_mask[:-1])
+        assert len(y) == (len2 - 1).sum().item()
+
+        # cuda
+        x1, len1, langs1, x2, len2, langs2, y = to_cuda(x1, len1, langs1, x2, len2, langs2, y)
+
+        # encode source sentence
+        enc1 = self.encoder('fwd', x=x1, lengths=len1, langs=langs1, causal=False)
+        enc1 = enc1.transpose(0, 1)
+
+        # decode target sentence
+        dec2 = self.decoder('fwd', x=x2, lengths=len2, langs=langs2, causal=True, src_enc=enc1, src_len=len1)
+
+
+        # loss
+        _, loss = self.decoder('predict', tensor=dec2, pred_mask=pred_mask, y=y, get_scores=False)
+        self.stats[('AE-%s' % lang1) if lang1 == lang2 else ('MT-%s-%s' % (lang1, lang2))].append(loss.item())
+
+        return loss
+
     def get_batch(self, iter_name, lang1, lang2=None, domain='wmt'):
         """
         Return a batch of sentences from a dataset.
         """
         assert lang1 in self.params.langs
         assert lang2 is None or lang2 in self.params.langs
+
         logger.info(f'DOMAIN is {domain}')
-        iterator = self.iterators.get((iter_name, lang1, lang2), None)
+        iterator = self.iterators.get((iter_name, lang1, lang2,domain), None)
+
         if iterator is None:
             iterator = self.get_iterator(iter_name, lang1, lang2, domain)
         try:
             x = next(iterator)
         except StopIteration:
-            domain = self.domains[self.domains.index(domain) + 1]
+            domain = next(self.domain_cycle)
             iterator = self.get_iterator(iter_name, lang1, lang2, domain)
             x = next(iterator)
         return x if lang2 is None or lang1 < lang2 else x[::-1]
@@ -1060,3 +1103,119 @@ class MultiDomainTrainer(Trainer):
 
         self.iterators[(iter_name, lang1, lang2, domain)] = iterator
         return iterator
+
+
+    def get_iterator_by_sample(self, data_set, lang1, lang2, domain, n_samples=-1):
+        """
+        Create a new iterator for a dataset.
+        """
+
+        _lang1, _lang2 = (lang1, lang2) if lang1 < lang2 else (lang2, lang1)
+        iterator = self.data['para'][(_lang1, _lang2,domain)][data_set].get_iterator(
+            shuffle=False,
+            group_by_size=True,
+            n_sentences=n_samples
+        )
+
+        for batch in iterator:
+            yield batch if lang2 is None or lang1 < lang2 else batch[::-1]
+
+    def get_grad_sim(self, grad1,grad2):
+
+        cosine_prod, cosine_norm, dev_cosine_norm = 0, 0, 0
+
+        for g1, g2 in zip(grad1,grad2):
+            cosine_prod += (g1 * g2).sum().item()
+            cosine_norm += g1.norm(2) ** 2
+            dev_cosine_norm += g2.norm(2) ** 2
+
+        cosine_sim = cosine_prod / ((cosine_norm * dev_cosine_norm) ** 0.5 + 1e-10)
+        return cosine_sim.item(), cosine_norm, dev_cosine_norm
+
+    def update_sampling_distribution(self, logits):
+        #print(logits)
+        print("previous probs")
+        print(self.p)
+        for i, l in enumerate(logits):
+            if logits[i] < 0:
+                logits[i] = 0
+        if sum(logits) == 0:
+            logits = [0.1 for _ in range(len(logits))]
+        p = np.array(logits) / sum(logits)
+        # self.alpha_p == 0 in the paper
+        self.p = p
+        print("final probs")
+        print(self.p)
+
+
+    def update_dataset_ratio(self):
+
+        # mainly de-en testing.
+        lang1, lang2 = self.params.mt_steps[0]
+
+        for ratio, domain in zip(self.p,self.domains):
+            self.data['para'][(lang1, lang2, domain)]['train'].ratio = ratio
+
+    def update_language_sampler_multidomain(self):
+        """Update the distribution to sample languages """
+        # calculate gradient direction
+        # calculate dev grad
+        # Initialize dev data iterator
+
+        # #dev dataset x #train dataset
+        all_sim_list = []
+
+        # mainly de-en testing.
+        lang1, lang2 = self.params.mt_steps[0]
+
+        for domain in self.domains:
+
+            num_of_sample = 8
+            train_set = self.get_iterator_by_sample('train',lang1,lang2, domain,num_of_sample)
+            train_batch = next(train_set)
+
+            train_loss = self.mt_step_by_domain(lang1,lang2,train_batch)
+
+            g_train = grad(train_loss,self.encoder.parameters() + self.decoder.parameters())
+
+            g_dev = 0
+            sim_list = []
+            for valid_domain in self.domains:
+
+                valid_set = self.get_iterator_by_sample('valid',lang1,lang2, valid_domain,num_of_sample)
+                valid_batch = next(valid_set)
+
+                valid_loss = self.mt_step_by_domain(lang1, lang2, valid_batch)
+                tmp_g_dev = grad(valid_loss,self.encoder.parameters() + self.decoder.parameters())
+                g_dev = [ g_1 + g_2 for g_1, g_2 in zip(g_dev, tmp_g_dev)]
+
+                sim, *_ = self.get_grad_sim(g_dev,g_train)
+                sim_list.append(sim)
+                all_sim_list.append(sim_list)
+                torch.cuda.empty_cache()
+        # ave
+        sim_list = np.mean(np.array(all_sim_list), axis=0).tolist()
+        print(sim_list)
+
+        feature = torch.ones(1,len(self.domains))
+        grad_scale = torch.FloatTensor(sim_list).view(1, -1)
+
+        feature = feature.cuda()
+        grad_scale = grad_scale.cuda()
+
+        for _ in range(self.params.data_actor_optim_step):
+            a_logits = self.data_actor.forward(feature)
+            loss = -torch.nn.functional.log_softmax(a_logits, dim=-1)
+            if self.params.scale_reward:
+                loss = loss * torch.softmax(a_logits, dim=-1).data
+            loss = (loss * grad_scale).sum()
+            loss.backward()
+            self.data_optimizer.step()
+            self.data_optimizer.zero_grad()
+        with torch.no_grad():
+            a_logits = self.data_actor.forward(feature)
+            prob = torch.nn.functional.softmax(a_logits, dim=-1)
+            sim_list = [i for i in prob.data.view(-1).cpu().numpy()]
+
+        self.update_sampling_distribution(sim_list)
+        self.update_dataset_ratio()
