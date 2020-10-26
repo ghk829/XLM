@@ -111,20 +111,34 @@ class Trainer(object):
         self.n_iter = 0
         self.n_total_iter = 0
         self.n_sentences = 0
+
         self.stats = OrderedDict(
             [('processed_s', 0), ('processed_w', 0)] +
             [('CLM-%s' % l, []) for l in params.langs] +
-            [('CLM-%s-%s' % (l1, l2), []) for l1, l2 in data['para'].keys()] +
-            [('CLM-%s-%s' % (l2, l1), []) for l1, l2 in data['para'].keys()] +
             [('MLM-%s' % l, []) for l in params.langs] +
-            [('MLM-%s-%s' % (l1, l2), []) for l1, l2 in data['para'].keys()] +
-            [('MLM-%s-%s' % (l2, l1), []) for l1, l2 in data['para'].keys()] +
             [('PC-%s-%s' % (l1, l2), []) for l1, l2 in params.pc_steps] +
             [('AE-%s' % lang, []) for lang in params.ae_steps] +
             [('MT-%s-%s' % (l1, l2), []) for l1, l2 in params.mt_steps] +
             [('BT-%s-%s-%s' % (l1, l2, l3), []) for l1, l2, l3 in params.bt_steps] +
             [('l0-loss',[])]
         )
+
+        if params.domains:
+            stats = OrderedDict(
+            [('CLM-%s-%s' % (l1, l2), []) for l1, l2,domain in data['para'].keys()] +
+            [('CLM-%s-%s' % (l2, l1), []) for l1, l2,domain in data['para'].keys()] +
+            [('MLM-%s-%s' % (l1, l2), []) for l1, l2,domain in data['para'].keys()] +
+            [('MLM-%s-%s' % (l2, l1), []) for l1, l2,domain in data['para'].keys()]
+            )
+        else:
+            stats = OrderedDict(
+                [('CLM-%s-%s' % (l1, l2), []) for l1, l2 in data['para'].keys()] +
+                [('CLM-%s-%s' % (l2, l1), []) for l1, l2 in data['para'].keys()] +
+                [('MLM-%s-%s' % (l1, l2), []) for l1, l2 in data['para'].keys()] +
+                [('MLM-%s-%s' % (l2, l1), []) for l1, l2 in data['para'].keys()]
+            )
+        self.stats.update(stats)
+
         self.last_time = time.time()
 
         # reload potential checkpoints
