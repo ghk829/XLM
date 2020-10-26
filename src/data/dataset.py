@@ -537,7 +537,7 @@ class DomainParallelDataset(Dataset):
             if eval:
                 n_sentences = len(self.pos1)
             else:
-                n_sentences = max(int(round(len(self.pos1) * self.ratio)),0.001)
+                n_sentences =  int(round(len(self.pos1) *  max(self.ratio,0.001)))
         assert 0 < n_sentences <= len(self.pos1)
         logger.info(f'n_sentences : {n_sentences}')
 
