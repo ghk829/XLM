@@ -1206,7 +1206,7 @@ class MultiDomainTrainer(Trainer):
 
                 valid_loss = self.mt_step_by_domain(lang1, lang2, valid_batch)
                 tmp_g_dev = grad(valid_loss,chain(self.encoder.parameters(),self.decoder.parameters()),allow_unused=True)
-                tmp_g_dev = (g for g in tmp_g_dev if g is not None)
+                tmp_g_dev = [g for g in tmp_g_dev if g is not None]
                 if len(g_dev) > 0:
                     g_dev = [ g_1 + g_2 for g_1, g_2 in zip(g_dev, tmp_g_dev)]
                 else:
