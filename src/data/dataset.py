@@ -526,7 +526,7 @@ class DomainParallelDataset(Dataset):
             sent2 = self.batch_sentences([self.sent2[a:b] for a, b in pos2])
             yield (sent1, sent2, sentence_ids) if return_indices else (sent1, sent2)
 
-    def get_iterator(self, shuffle, group_by_size=False, n_sentences=-1, return_indices=False):
+    def get_iterator(self, shuffle, group_by_size=False, n_sentences=-1, return_indices=False, eval=False):
         """
         Return a sentences iterator.
         """
@@ -534,7 +534,10 @@ class DomainParallelDataset(Dataset):
         assert type(shuffle) is bool and type(group_by_size) is bool
 
         if n_sentences == -1:
-            n_sentences = int(round(len(self.pos1) * self.ratio))
+            if eval:
+                n_sentences = len(self.pos1)
+            else:
+                n_sentences = max(int(round(len(self.pos1) * self.ratio)),0.01)
         assert 0 < n_sentences <= len(self.pos1)
 
         # sentence lengths
