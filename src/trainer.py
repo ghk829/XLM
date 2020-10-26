@@ -1151,9 +1151,6 @@ class MultiDomainTrainer(Trainer):
         return cosine_sim.item(), cosine_norm, dev_cosine_norm
 
     def update_sampling_distribution(self, logits):
-        #print(logits)
-        print("previous probs")
-        print(self.p)
         for i, l in enumerate(logits):
             if logits[i] < 0:
                 logits[i] = 0
@@ -1162,8 +1159,8 @@ class MultiDomainTrainer(Trainer):
         p = np.array(logits) / sum(logits)
         # self.alpha_p == 0 in the paper
         self.p = p
-        print("final probs")
-        print(self.p)
+        logger.info("final probs")
+        logger.info(self.p)
 
 
     def update_dataset_ratio(self):
