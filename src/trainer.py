@@ -1185,7 +1185,7 @@ class MultiDomainTrainer(Trainer):
 
         # mainly de-en testing.
         lang1, lang2 = self.params.mt_steps[0]
-
+        sim_list = []
         for domain in self.domains:
 
             num_of_sample = 8
@@ -1197,7 +1197,7 @@ class MultiDomainTrainer(Trainer):
             g_train = grad(train_loss,chain(self.encoder.parameters(),self.decoder.parameters()),allow_unused=True)
             g_train = [ g for g in g_train if g is not None ]
             g_dev = []
-            sim_list = []
+
             for valid_domain in self.domains:
 
                 valid_set = self.get_iterator_by_sample('valid',lang1,lang2, valid_domain,num_of_sample)
@@ -1210,12 +1210,13 @@ class MultiDomainTrainer(Trainer):
                     g_dev = [ g_1 + g_2 for g_1, g_2 in zip(g_dev, tmp_g_dev)]
                 else:
                     g_dev = tmp_g_dev
-                sim, *_ = self.get_grad_sim(g_dev,g_train)
-                sim_list.append(sim)
-            all_sim_list.append(sim_list)
+            sim, *_ = self.get_grad_sim(g_dev,g_train)
+            sim_list.append(sim)
+            #all_sim_list.append(sim)
             torch.cuda.empty_cache()
         # ave
-        sim_list = np.mean(np.array(all_sim_list), axis=0).tolist()
+        #sim_list = np.mean(np.array(all_sim_list), axis=0).tolist()
+        #sim_list = np.mean(np.array(all_sim_list), axis=0).tolist()
 
         feature = torch.ones(1,len(self.domains))
         grad_scale = torch.FloatTensor(sim_list).view(1, -1)
