@@ -642,7 +642,8 @@ class MultiDomainEvaluator(Evaluator):
         iterator = self.data['para'][(_lang1, _lang2,domain)][data_set].get_iterator(
             shuffle=False,
             group_by_size=True,
-            n_sentences=n_sentences
+            n_sentences=n_sentences,
+            eval=True
         )
 
         for batch in iterator:
