@@ -982,6 +982,7 @@ class MultiDomainTrainer(Trainer):
 
         from itertools import cycle
         self.domain_cycle = cycle(self.domains)
+        self.domain = next(self.domain_cycle)
 
         data_actor = BaseActor(len(params.domains))
         self.data_actor = data_actor.cuda()
@@ -1082,22 +1083,23 @@ class MultiDomainTrainer(Trainer):
 
         return loss
 
-    def get_batch(self, iter_name, lang1, lang2=None, domain='wmt'):
+    def get_batch(self, iter_name, lang1, lang2=None):
         """
         Return a batch of sentences from a dataset.
         """
         assert lang1 in self.params.langs
         assert lang2 is None or lang2 in self.params.langs
 
-        iterator = self.iterators.get((iter_name, lang1, lang2,domain), None)
+        iterator = self.iterators.get((iter_name, lang1, lang2, self.domain), None)
 
         if iterator is None:
-            iterator = self.get_iterator(iter_name, lang1, lang2, domain)
+            iterator = self.get_iterator(iter_name, lang1, lang2, self.domain)
         try:
             x = next(iterator)
         except StopIteration:
             domain = next(self.domain_cycle)
             logger.info(f'NEXT DOMAIN is {domain}')
+            self.domain = domain
             iterator = self.get_iterator(iter_name, lang1, lang2, domain)
             x = next(iterator)
         return x if lang2 is None or lang1 < lang2 else x[::-1]
