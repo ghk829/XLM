@@ -1097,6 +1097,7 @@ class MultiDomainTrainer(Trainer):
             x = next(iterator)
         except StopIteration:
             domain = next(self.domain_cycle)
+            logger.info(f'NEXT DOMAIN is {domain}')
             iterator = self.get_iterator(iter_name, lang1, lang2, domain)
             x = next(iterator)
         return x if lang2 is None or lang1 < lang2 else x[::-1]
