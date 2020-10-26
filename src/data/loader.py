@@ -233,60 +233,58 @@ def load_para_data_with_domain(params, data, prior_ratios):
 
     required_para_train = set(params.clm_steps + params.mlm_steps + params.pc_steps + params.mt_steps)
 
-    for ratio, domain in zip(prior_ratios, params.domains):
+    for (src, tgt, domain), ratio in zip(params.para_dataset.keys(), prior_ratios):
 
-        for src, tgt in params.para_dataset.keys():
+        logger.info('============ Parallel data (%s-%s)' % (src, tgt))
 
-            logger.info('============ Parallel data (%s-%s)' % (src, tgt))
+        assert (src, tgt) not in data['para']
+        data['para'][(src, tgt,domain)] = {}
 
-            assert (src, tgt) not in data['para']
-            data['para'][(src, tgt,domain)] = {}
+        for splt in ['train', 'valid', 'test']:
 
-            for splt in ['train', 'valid', 'test']:
+            # no need to load training data for evaluation
+            if splt == 'train' and params.eval_only:
+                continue
 
-                # no need to load training data for evaluation
-                if splt == 'train' and params.eval_only:
-                    continue
+            # for back-translation, we can't load training data
+            if splt == 'train' and (src, tgt) not in required_para_train and (tgt, src) not in required_para_train:
+                continue
 
-                # for back-translation, we can't load training data
-                if splt == 'train' and (src, tgt) not in required_para_train and (tgt, src) not in required_para_train:
-                    continue
+            # load binarized datasets
+            src_path, tgt_path = params.para_dataset[(src, tgt, domain)][splt]
+            src_data = load_binarized(src_path, params)
+            tgt_data = load_binarized(tgt_path, params)
 
-                # load binarized datasets
-                src_path, tgt_path = params.para_dataset[(src, tgt, domain)][splt]
-                src_data = load_binarized(src_path, params)
-                tgt_data = load_binarized(tgt_path, params)
+            # update dictionary parameters
+            set_dico_parameters(params, data, src_data['dico'])
+            set_dico_parameters(params, data, tgt_data['dico'])
 
-                # update dictionary parameters
-                set_dico_parameters(params, data, src_data['dico'])
-                set_dico_parameters(params, data, tgt_data['dico'])
+            # create ParallelDataset with domain ratio
+            dataset = DomainParallelDataset(
+                src_data['sentences'], src_data['positions'],
+                tgt_data['sentences'], tgt_data['positions'],
+                ratio,
+                params
+            )
 
-                # create ParallelDataset with domain ratio
-                dataset = DomainParallelDataset(
-                    src_data['sentences'], src_data['positions'],
-                    tgt_data['sentences'], tgt_data['positions'],
-                    ratio,
-                    params
-                )
+            # remove empty and too long sentences
+            if splt == 'train':
+                dataset.remove_empty_sentences()
+                dataset.remove_long_sentences(params.max_len)
 
-                # remove empty and too long sentences
-                if splt == 'train':
-                    dataset.remove_empty_sentences()
-                    dataset.remove_long_sentences(params.max_len)
+            # for validation and test set, enumerate sentence per sentence
+            if splt != 'train':
+                dataset.tokens_per_batch = -1
 
-                # for validation and test set, enumerate sentence per sentence
-                if splt != 'train':
-                    dataset.tokens_per_batch = -1
+            # if there are several processes on the same machine, we can split the dataset
+            if splt == 'train' and params.n_gpu_per_node > 1 and params.split_data:
+                n_sent = len(dataset) // params.n_gpu_per_node
+                a = n_sent * params.local_rank
+                b = n_sent * params.local_rank + n_sent
+                dataset.select_data(a, b)
 
-                # if there are several processes on the same machine, we can split the dataset
-                if splt == 'train' and params.n_gpu_per_node > 1 and params.split_data:
-                    n_sent = len(dataset) // params.n_gpu_per_node
-                    a = n_sent * params.local_rank
-                    b = n_sent * params.local_rank + n_sent
-                    dataset.select_data(a, b)
-
-                data['para'][(src, tgt, domain)][splt] = dataset
-                logger.info("")
+            data['para'][(src, tgt, domain)][splt] = dataset
+            logger.info("")
 
     logger.info("")
 
@@ -395,6 +393,9 @@ def check_data_params(params):
             for domain in params.domains
         }
         # @TODO : params.prior_ratio 구현
+        # 데이터셋을 읽어들여 데이터셋 사이즈로 조정한다.
+        params.prior_ratios = [1 for _ in params.domains ]
+
 
 
 
