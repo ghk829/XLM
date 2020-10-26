@@ -392,7 +392,7 @@ def check_data_params(params):
                 if splt != 'train' or (src, tgt) in required_para_train or (tgt, src) in required_para_train
             } for src in params.langs for tgt in params.langs
             if src < tgt and ((src, tgt) in required_para or (tgt, src) in required_para)
-            for domain in params.domain
+            for domain in params.domains
         }
         # @TODO : params.prior_ratio 구현
 
