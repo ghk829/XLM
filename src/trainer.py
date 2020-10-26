@@ -1196,7 +1196,7 @@ class MultiDomainTrainer(Trainer):
             train_loss = self.mt_step_by_domain(lang1,lang2,train_batch)
 
             g_train = grad(train_loss,chain(self.encoder.parameters(),self.decoder.parameters()),allow_unused=True)
-            g_train = ( g for g in g_train if g is not None )
+            g_train = [ g for g in g_train if g is not None ]
             g_dev = []
             sim_list = []
             for valid_domain in self.domains:
