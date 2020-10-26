@@ -1126,7 +1126,7 @@ class MultiDomainTrainer(Trainer):
 
         _lang1, _lang2 = (lang1, lang2) if lang1 < lang2 else (lang2, lang1)
         iterator = self.data['para'][(_lang1, _lang2,domain)][data_set].get_iterator(
-            shuffle=False,
+            shuffle=True,
             group_by_size=True,
             n_sentences=n_samples
         )
