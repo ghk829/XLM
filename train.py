@@ -223,7 +223,7 @@ def get_parser():
     parser.add_argument('--dec_self', type=bool_flag, default=False)
 
     # adaptive sampling ratio
-    parser.add_argument('--domains',types=str,default='')
+    parser.add_argument('--domains',type=str,default='')
     parser.add_argument('data_actor_lr',type=float,default=0.01)
     parser.add_argument('data_actor_optim_step',type=int,default=1)
     parser.add_argument('scale_reward',type=bool_flag,default=True)
