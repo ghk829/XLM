@@ -1210,8 +1210,8 @@ class MultiDomainTrainer(Trainer):
                     g_dev = [ g_1 + g_2 for g_1, g_2 in zip(g_dev, tmp_g_dev)]
                 else:
                     g_dev = tmp_g_dev
-            sim, *_ = self.get_grad_sim(g_dev,g_train)
-            sim_list.append(sim)
+                sim, *_ = self.get_grad_sim(g_dev,g_train)
+                sim_list.append(sim)
             all_sim_list.append(sim_list)
             torch.cuda.empty_cache()
         # ave
