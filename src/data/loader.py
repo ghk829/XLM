@@ -394,7 +394,7 @@ def check_data_params(params):
         }
         # @TODO : params.prior_ratio 구현
         # 데이터셋을 읽어들여 데이터셋 사이즈로 조정한다.
-        params.prior_ratios = [1 for _ in params.domains ]
+        params.prior_ratios = [1/len(params.domains) for _ in params.domains ]
 
 
 
@@ -445,7 +445,7 @@ def load_data(params):
 
     # parallel data summary
     if params.domains:
-        for (src, tgt,domain), v in data['para'].items():
+        for (src, tgt, domain), v in data['para'].items():
             for data_set in v.keys():
                 logger.info('{: <18} - {: >5} - {: >12}:{: >10}'.format('Parallel data', data_set, '%s-%s-%s' % (src, tgt,domain),
                                                                         len(v[data_set])))

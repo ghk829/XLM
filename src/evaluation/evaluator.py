@@ -583,7 +583,72 @@ class MultiDomainEvaluator(Evaluator):
         self.encoder = trainer.encoder
         self.decoder = trainer.decoder
 
-    def evaluate_mt(self, scores, data_set, lang1, lang2, eval_bleu):
+    def create_reference_files(self):
+        """
+        Create reference files for BLEU evaluation.
+        """
+        params = self.params
+        params.ref_paths = {}
+
+        for (lang1, lang2, domain), v in self.data['para'].items():
+
+            assert lang1 < lang2
+
+            for data_set in ['valid', 'test']:
+
+                # define data paths
+                lang1_path = os.path.join(params.hyp_path, 'ref.{0}-{1}.{2}.{3}.txt'.format(lang2, lang1, data_set,domain))
+                lang2_path = os.path.join(params.hyp_path, 'ref.{0}-{1}.{2}.{3}.txt'.format(lang1, lang2, data_set,domain))
+
+                # store data paths
+                params.ref_paths[(lang2, lang1, data_set,domain)] = lang1_path
+                params.ref_paths[(lang1, lang2, data_set,domain)] = lang2_path
+
+                # text sentences
+                lang1_txt = []
+                lang2_txt = []
+
+                # convert to text
+                for (sent1, len1), (sent2, len2) in self.get_iterator(data_set, lang1, lang2,domain):
+                    lang1_txt.extend(convert_to_text(sent1, len1, self.dico, params))
+                    lang2_txt.extend(convert_to_text(sent2, len2, self.dico, params))
+
+                # replace <unk> by <<unk>> as these tokens cannot be counted in BLEU
+                lang1_txt = [x.replace('<unk>', '<<unk>>') for x in lang1_txt]
+                lang2_txt = [x.replace('<unk>', '<<unk>>') for x in lang2_txt]
+
+                # export hypothesis
+                with open(lang1_path, 'w', encoding='utf-8') as f:
+                    f.write('\n'.join(lang1_txt) + '\n')
+                with open(lang2_path, 'w', encoding='utf-8') as f:
+                    f.write('\n'.join(lang2_txt) + '\n')
+
+                # restore original segmentation
+                restore_segmentation(lang1_path)
+                restore_segmentation(lang2_path)
+
+    def get_iterator(self, data_set, lang1, lang2, domain):
+        """
+        Create a new iterator for a dataset.
+        """
+        assert data_set in ['valid', 'test']
+        assert lang1 in self.params.langs
+        assert lang2 is None or lang2 in self.params.langs
+
+        n_sentences = -1
+        subsample = 1
+
+        _lang1, _lang2 = (lang1, lang2) if lang1 < lang2 else (lang2, lang1)
+        iterator = self.data['para'][(_lang1, _lang2,domain)][data_set].get_iterator(
+            shuffle=False,
+            group_by_size=True,
+            n_sentences=n_sentences
+        )
+
+        for batch in iterator:
+            yield batch if lang2 is None or lang1 < lang2 else batch[::-1]
+
+    def evaluate_mt(self, scores, data_set, lang1, lang2, eval_bleu,domain):
         """
         Evaluate perplexity and next word prediction accuracy.
         """
@@ -615,7 +680,7 @@ class MultiDomainEvaluator(Evaluator):
         if eval_bleu:
             hypothesis = []
 
-        for batch in self.get_iterator(data_set, lang1, lang2):
+        for batch in self.get_iterator(data_set, lang1, lang2,domain):
 
             # generate batch
             (x1, len1), (x2, len2) = batch
@@ -685,9 +750,9 @@ class MultiDomainEvaluator(Evaluator):
         if eval_bleu:
 
             # hypothesis / reference paths
-            hyp_name = 'hyp{0}.{1}-{2}.{3}.txt'.format(scores['epoch'], lang1, lang2, data_set)
+            hyp_name = 'hyp{0}.{1}-{2}.{3}.{4}.txt'.format(scores['epoch'], lang1, lang2, data_set,domain)
             hyp_path = os.path.join(params.hyp_path, hyp_name)
-            ref_path = params.ref_paths[(lang1, lang2, data_set)]
+            ref_path = params.ref_paths[(lang1, lang2, data_set,domain)]
 
             # export sentences to hypothesis file / restore BPE segmentation
             with open(hyp_path, 'w', encoding='utf-8') as f:
@@ -697,4 +762,40 @@ class MultiDomainEvaluator(Evaluator):
             # evaluate BLEU score
             bleu = eval_moses_bleu(ref_path, hyp_path)
             logger.info("BLEU %s %s : %f" % (hyp_path, ref_path, bleu))
-            scores['%s_%s-%s_mt_bleu' % (data_set, lang1, lang2)] = bleu
+            scores['%s_%s-%s-%s_mt_bleu' % (data_set, lang1, lang2,domain)] = bleu
+
+    def run_all_evals(self, trainer):
+        """
+        Run all evaluations.
+        """
+        params = self.params
+        scores = OrderedDict({'epoch': trainer.epoch})
+
+        with torch.no_grad():
+            for domain in params.domains:
+                for data_set in ['valid', 'test']:
+
+                    # causal prediction task (evaluate perplexity and accuracy)
+                    for lang1, lang2 in params.clm_steps:
+                        self.evaluate_clm(scores, data_set, lang1, lang2)
+
+                    # prediction task (evaluate perplexity and accuracy)
+                    for lang1, lang2 in params.mlm_steps:
+                        self.evaluate_mlm(scores, data_set, lang1, lang2)
+
+                    # machine translation task (evaluate perplexity and accuracy)
+                    for lang1, lang2 in set(params.mt_steps + [(l2, l3) for _, l2, l3 in params.bt_steps]):
+                        eval_bleu = params.eval_bleu and params.is_master
+                        self.evaluate_mt(scores, data_set, lang1, lang2, eval_bleu,domain)
+
+                    # report average metrics per language
+                    _clm_mono = [l1 for (l1, l2) in params.clm_steps if l2 is None]
+                    if len(_clm_mono) > 0:
+                        scores['%s_clm_ppl' % data_set + domain] = np.mean([scores['%s_%s_clm_ppl' % (data_set, lang)] for lang in _clm_mono])
+                        scores['%s_clm_acc' % data_set + domain] = np.mean([scores['%s_%s_clm_acc' % (data_set, lang)] for lang in _clm_mono])
+                    _mlm_mono = [l1 for (l1, l2) in params.mlm_steps if l2 is None]
+                    if len(_mlm_mono) > 0:
+                        scores['%s_mlm_ppl' % data_set + domain] = np.mean([scores['%s_%s_mlm_ppl' % (data_set, lang)] for lang in _mlm_mono])
+                        scores['%s_mlm_acc' % data_set + domain] = np.mean([scores['%s_%s_mlm_acc' % (data_set, lang)] for lang in _mlm_mono])
+
+        return scores
