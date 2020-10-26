@@ -436,7 +436,7 @@ class DomainParallelDataset(Dataset):
         """
         Number of sentences in the dataset.
         """
-        return round(len(self.pos1) * self.ratio)
+        return int(round(len(self.pos1) * self.ratio))
 
     def check(self):
         """
@@ -534,7 +534,7 @@ class DomainParallelDataset(Dataset):
         assert 0 < n_sentences <= len(self.pos1)
         assert type(shuffle) is bool and type(group_by_size) is bool
 
-        n_sentences = round(n_sentences * self.ratio)
+        n_sentences = int(round(n_sentences * self.ratio))
 
         # sentence lengths
         lengths = self.lengths1 + self.lengths2 + 4
