@@ -1089,7 +1089,6 @@ class MultiDomainTrainer(Trainer):
         assert lang1 in self.params.langs
         assert lang2 is None or lang2 in self.params.langs
 
-        logger.info(f'DOMAIN is {domain}')
         iterator = self.iterators.get((iter_name, lang1, lang2,domain), None)
 
         if iterator is None:
@@ -1217,7 +1216,6 @@ class MultiDomainTrainer(Trainer):
             torch.cuda.empty_cache()
         # ave
         sim_list = np.mean(np.array(all_sim_list), axis=0).tolist()
-        print(sim_list)
 
         feature = torch.ones(1,len(self.domains))
         grad_scale = torch.FloatTensor(sim_list).view(1, -1)
