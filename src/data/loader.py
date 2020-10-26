@@ -386,8 +386,8 @@ def check_data_params(params):
         params.domains = params.domains.split(',')
         params.para_dataset = {
             (src, tgt, domain): {
-                splt: (os.path.join(params.data_path, domain ,'%s/%s.%s-%s.%s.pth' % (splt, src, tgt, src)),
-                       os.path.join(params.data_path, domain ,'%s/%s.%s-%s.%s.pth' % (splt, src, tgt, tgt)))
+                splt: (os.path.join(params.data_path, domain ,'%s.%s-%s.%s.pth' % (splt, src, tgt, src)),
+                       os.path.join(params.data_path, domain ,'%s.%s-%s.%s.pth' % (splt, src, tgt, tgt)))
                 for splt in para_set
                 if splt != 'train' or (src, tgt) in required_para_train or (tgt, src) in required_para_train
             } for src in params.langs for tgt in params.langs
