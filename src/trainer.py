@@ -1212,7 +1212,7 @@ class MultiDomainTrainer(Trainer):
                     g_dev = tmp_g_dev
                 sim, *_ = self.get_grad_sim(g_dev,g_train)
                 sim_list.append(sim)
-            all_sim_list.append(sim)
+            all_sim_list.append(sim_list)
             torch.cuda.empty_cache()
         # ave
         sim_list = np.mean(np.array(all_sim_list), axis=1).tolist()
