@@ -1138,6 +1138,11 @@ class MultiDomainTrainer(Trainer):
 
         cosine_prod, cosine_norm, dev_cosine_norm = 0, 0, 0
 
+        assert len(grad1)==len(grad2)
+        grad1 = ( g1 for g1 in grad1 if g1 is not None )
+        grad2 = ( g2 for g2 in grad2 if g2 is not None )
+
+
         for g1, g2 in zip(grad1,grad2):
             cosine_prod += (g1 * g2).sum().item()
             cosine_norm += g1.norm(2) ** 2
