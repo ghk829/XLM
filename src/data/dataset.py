@@ -530,11 +530,11 @@ class DomainParallelDataset(Dataset):
         """
         Return a sentences iterator.
         """
-        n_sentences = len(self.pos1) if n_sentences == -1 else n_sentences
         assert 0 < n_sentences <= len(self.pos1)
         assert type(shuffle) is bool and type(group_by_size) is bool
 
-        n_sentences = int(round(n_sentences * self.ratio))
+        if n_sentences == -1:
+            n_sentences = int(round(n_sentences * self.ratio))
 
         # sentence lengths
         lengths = self.lengths1 + self.lengths2 + 4
