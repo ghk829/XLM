@@ -256,6 +256,7 @@ def main(params):
         trainer = SingleTrainer(model, data, params)
         evaluator = SingleEvaluator(trainer, data, params)
     elif params.domains:
+        params.domains = params.domains.split(',')
         trainer = MultiDomainTrainer(encoder, decoder, data, params)
         evaluator = MultiDomainEvaluator(trainer, data, params)
     else:
