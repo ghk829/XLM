@@ -1175,7 +1175,7 @@ class MultiDomainTrainer(Trainer):
         # calculate gradient direction
         # calculate dev grad
         # Initialize dev data iterator
-
+        from itertools import chain
         # #dev dataset x #train dataset
         all_sim_list = []
 
@@ -1190,7 +1190,7 @@ class MultiDomainTrainer(Trainer):
 
             train_loss = self.mt_step_by_domain(lang1,lang2,train_batch)
 
-            g_train = grad(train_loss,self.encoder.parameters() + self.decoder.parameters())
+            g_train = grad(train_loss,chain(self.encoder.parameters(),self.decoder.parameters()),allow_unused=True)
 
             g_dev = 0
             sim_list = []
@@ -1200,7 +1200,7 @@ class MultiDomainTrainer(Trainer):
                 valid_batch = next(valid_set)
 
                 valid_loss = self.mt_step_by_domain(lang1, lang2, valid_batch)
-                tmp_g_dev = grad(valid_loss,self.encoder.parameters() + self.decoder.parameters())
+                tmp_g_dev = grad(valid_loss,chain(self.encoder.parameters(),self.decoder.parameters()),allow_unused=True)
                 g_dev = [ g_1 + g_2 for g_1, g_2 in zip(g_dev, tmp_g_dev)]
 
                 sim, *_ = self.get_grad_sim(g_dev,g_train)
