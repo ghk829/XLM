@@ -444,10 +444,16 @@ def load_data(params):
                 '{: <18} - {: >5} - {: >12}:{: >10}'.format('Monolingual data', data_set, lang, len(v[data_set])))
 
     # parallel data summary
-    for (src, tgt), v in data['para'].items():
-        for data_set in v.keys():
-            logger.info('{: <18} - {: >5} - {: >12}:{: >10}'.format('Parallel data', data_set, '%s-%s' % (src, tgt),
-                                                                    len(v[data_set])))
+    if params.domains:
+        for (src, tgt,domain), v in data['para'].items():
+            for data_set in v.keys():
+                logger.info('{: <18} - {: >5} - {: >12}:{: >10}'.format('Parallel data', data_set, '%s-%s-%s' % (src, tgt,domain),
+                                                                        len(v[data_set])))
+    else:
+        for (src, tgt), v in data['para'].items():
+            for data_set in v.keys():
+                logger.info('{: <18} - {: >5} - {: >12}:{: >10}'.format('Parallel data', data_set, '%s-%s' % (src, tgt),
+                                                                        len(v[data_set])))
 
     logger.info("")
     return data
