@@ -585,6 +585,7 @@ class MultiDomainEvaluator(Evaluator):
         self.decoder = trainer.decoder
         self.domains = params.domains
         self.p = params.prior_ratios
+        self.params = params
 
         data_actor = BaseActor(len(params.domains))
         self.data_actor = data_actor.cuda()
@@ -923,6 +924,9 @@ class MultiDomainEvaluator(Evaluator):
         # mainly de-en testing.
         lang1, lang2 = self.params.mt_steps[0]
 
+        encoder = self.encoder.module if self.params.multi_gpu else self.encoder
+        decoder = self.decoder.module if self.params.multi_gpu else self.decoder
+
         for domain in self.domains:
 
             num_of_sample = 8
@@ -931,7 +935,7 @@ class MultiDomainEvaluator(Evaluator):
 
             train_loss = self.mt_step_by_domain(lang1,lang2,train_batch)
 
-            g_train = grad(train_loss,chain(self.encoder.parameters(),self.decoder.parameters()),allow_unused=True)
+            g_train = grad(train_loss, chain(encoder.parameters(),decoder.parameters()),allow_unused=True)
             g_train = [ g for g in g_train if g is not None ]
             g_dev = []
             sim_list = []
@@ -941,7 +945,7 @@ class MultiDomainEvaluator(Evaluator):
                 valid_batch = next(valid_set)
 
                 valid_loss = self.mt_step_by_domain(lang1, lang2, valid_batch)
-                tmp_g_dev = grad(valid_loss,chain(self.encoder.parameters(),self.decoder.parameters()),allow_unused=True)
+                tmp_g_dev = grad(valid_loss, chain(encoder.parameters(),decoder.parameters()),allow_unused=True)
                 tmp_g_dev = [g for g in tmp_g_dev if g is not None]
                 if len(g_dev) > 0:
                     g_dev = [ g_1 + g_2 for g_1, g_2 in zip(g_dev, tmp_g_dev)]
