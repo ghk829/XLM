@@ -436,7 +436,7 @@ class DomainParallelDataset(Dataset):
         """
         Number of sentences in the dataset.
         """
-        return int(round(len(self.pos1) * self.ratio))
+        return len(self.pos1) #int(round(len(self.pos1) * self.ratio))
 
     def check(self):
         """
@@ -536,8 +536,8 @@ class DomainParallelDataset(Dataset):
         if n_sentences == -1:
             if eval:
                 n_sentences = len(self.pos1)
-            else:
-                n_sentences =  int(round(len(self.pos1) *  max(self.ratio,0.001)))
+            # else:
+            #     n_sentences =  int(round(len(self.pos1) *  max(self.ratio,0.001)))
         assert 0 < n_sentences <= len(self.pos1)
 
         # sentence lengths
