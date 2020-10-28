@@ -981,9 +981,6 @@ class MultiDomainTrainer(Trainer):
 
         self.p = params.prior_ratios
 
-        from itertools import cycle
-        self.domains = cycle(self.domains)
-
         data_actor = BaseActor(len(params.domains))
         self.data_actor = data_actor.cuda()
         self.data_optimizer = torch.optim.Adam([p for p in self.data_actor.parameters() if p.requires_grad],
