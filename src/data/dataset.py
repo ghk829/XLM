@@ -534,10 +534,7 @@ class DomainParallelDataset(Dataset):
         assert type(shuffle) is bool and type(group_by_size) is bool
 
         if n_sentences == -1:
-            if eval:
-                n_sentences = len(self.pos1)
-            # else:
-            #     n_sentences =  int(round(len(self.pos1) *  max(self.ratio,0.001)))
+            len(self.pos1)
         assert 0 < n_sentences <= len(self.pos1)
 
         # sentence lengths
