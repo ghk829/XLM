@@ -15,6 +15,7 @@ import torch
 from ..utils import to_cuda, restore_segmentation, concat_batches
 from ..model.memory import HashingMemory
 from torch.autograd import grad
+from ..model.data_actor import BaseActor
 
 BLEU_SCRIPT_PATH = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'multi-bleu.perl')
 assert os.path.isfile(BLEU_SCRIPT_PATH)
@@ -584,6 +585,11 @@ class MultiDomainEvaluator(Evaluator):
         self.decoder = trainer.decoder
         self.domains = params.domains
         self.p = params.prior_ratios
+
+        data_actor = BaseActor(len(params.domains))
+        self.data_actor = data_actor.cuda()
+        self.data_optimizer = torch.optim.Adam([p for p in self.data_actor.parameters() if p.requires_grad],
+                                               lr=params.data_actor_lr)
 
     def create_reference_files(self):
         """
