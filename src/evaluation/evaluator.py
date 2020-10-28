@@ -840,7 +840,7 @@ class MultiDomainEvaluator(Evaluator):
 
         # loss
         _, loss = self.decoder('predict', tensor=dec2, pred_mask=pred_mask, y=y, get_scores=False)
-        self.stats[('AE-%s' % lang1) if lang1 == lang2 else ('MT-%s-%s' % (lang1, lang2))].append(loss.item())
+        #self.stats[('AE-%s' % lang1) if lang1 == lang2 else ('MT-%s-%s' % (lang1, lang2))].append(loss.item())
 
         return loss
 
@@ -891,11 +891,15 @@ class MultiDomainEvaluator(Evaluator):
 
     def update_dataset_ratio(self,trainer):
 
+        if type(trainer) == torch.nn.parallel.DistributedDataParallel:
+            trainer.module.p = self.p
+        else:
+            trainer.p = self.p
         # mainly de-en testing.
-        lang1, lang2 = self.params.mt_steps[0]
+        #lang1, lang2 = self.params.mt_steps[0]
 
-        for ratio, domain in zip(self.p,self.domains):
-            trainer.data['para'][(lang1, lang2, domain)]['train'].ratio = ratio
+        #for ratio, domain in zip(self.p,self.domains):
+        #    trainer.data['para'][(lang1, lang2, domain)]['train'].ratio = ratio
 
     def update_language_sampler_multidomain(self):
         """Update the distribution to sample languages """
