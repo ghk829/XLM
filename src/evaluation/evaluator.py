@@ -816,8 +816,12 @@ class MultiDomainEvaluator(Evaluator):
         """
 
         params = self.params
-        self.encoder.train()
-        self.decoder.train()
+
+        encoder = self.encoder.module if params.multi_gpu else self.encoder
+        decoder = self.decoder.module if params.multi_gpu else self.decoder
+
+        encoder.train()
+        decoder.train()
 
         lang1_id = params.lang2id[lang1]
         lang2_id = params.lang2id[lang2]
@@ -837,15 +841,15 @@ class MultiDomainEvaluator(Evaluator):
         x1, len1, langs1, x2, len2, langs2, y = to_cuda(x1, len1, langs1, x2, len2, langs2, y)
 
         # encode source sentence
-        enc1 = self.encoder('fwd', x=x1, lengths=len1, langs=langs1, causal=False)
+        enc1 = encoder('fwd', x=x1, lengths=len1, langs=langs1, causal=False)
         enc1 = enc1.transpose(0, 1)
 
         # decode target sentence
-        dec2 = self.decoder('fwd', x=x2, lengths=len2, langs=langs2, causal=True, src_enc=enc1, src_len=len1)
+        dec2 = decoder('fwd', x=x2, lengths=len2, langs=langs2, causal=True, src_enc=enc1, src_len=len1)
 
 
         # loss
-        _, loss = self.decoder('predict', tensor=dec2, pred_mask=pred_mask, y=y, get_scores=False)
+        _, loss = decoder('predict', tensor=dec2, pred_mask=pred_mask, y=y, get_scores=False)
         #self.stats[('AE-%s' % lang1) if lang1 == lang2 else ('MT-%s-%s' % (lang1, lang2))].append(loss.item())
 
         return loss
