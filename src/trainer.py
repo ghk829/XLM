@@ -1161,13 +1161,13 @@ class MultiDomainTrainer(Trainer):
         logger.info(self.p)
 
 
-    def update_dataset_ratio(self):
+    def update_dataset_ratio(self,trainer):
 
         # mainly de-en testing.
         lang1, lang2 = self.params.mt_steps[0]
 
         for ratio, domain in zip(self.p,self.domains):
-            self.data['para'][(lang1, lang2, domain)]['train'].ratio = ratio
+            trainer.data['para'][(lang1, lang2, domain)]['train'].ratio = ratio
 
     def update_language_sampler_multidomain(self):
         """Update the distribution to sample languages """
@@ -1233,4 +1233,4 @@ class MultiDomainTrainer(Trainer):
             sim_list = [i for i in prob.data.view(-1).cpu().numpy()]
 
         self.update_sampling_distribution(sim_list)
-        self.update_dataset_ratio()
+        #self.update_dataset_ratio()

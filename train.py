@@ -227,6 +227,7 @@ def get_parser():
     parser.add_argument('--data_actor_lr',type=float,default=0.01)
     parser.add_argument('--data_actor_optim_step',type=int,default=1)
     parser.add_argument('--scale_reward',type=bool_flag,default=True)
+    parser.add_argument('--domain_ratio_update_freq',type=int,default=0)
 
     return parser
 
@@ -308,8 +309,9 @@ def main(params):
 
             trainer.iter()
 
-        if params.domains:
-            trainer.update_language_sampler_multidomain()
+            if params.domains and params.domain_ratio_update_freq > 0 and trainer.n_total_iter % params.domain_ratio_update_freq == 0:
+                evaluator.update_language_sampler_multidomain()
+                evaluator.update_dataset_ratio(trainer)
 
         logger.info("============ End of epoch %i ============" % trainer.epoch)
 

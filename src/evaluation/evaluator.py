@@ -14,7 +14,7 @@ import torch
 
 from ..utils import to_cuda, restore_segmentation, concat_batches
 from ..model.memory import HashingMemory
-
+from torch.autograd import grad
 
 BLEU_SCRIPT_PATH = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'multi-bleu.perl')
 assert os.path.isfile(BLEU_SCRIPT_PATH)
@@ -582,6 +582,8 @@ class MultiDomainEvaluator(Evaluator):
         super().__init__(trainer, data, params)
         self.encoder = trainer.encoder
         self.decoder = trainer.decoder
+        self.domains = params.domains
+        self.p = params.prior_ratios
 
     def create_reference_files(self):
         """
@@ -800,3 +802,123 @@ class MultiDomainEvaluator(Evaluator):
                         scores['%s_mlm_acc' % data_set + domain] = np.mean([scores['%s_%s_mlm_acc' % (data_set, lang)] for lang in _mlm_mono])
 
         return scores
+
+
+    def get_iterator_by_sample(self, data_set, lang1, lang2, domain, n_samples=-1):
+        """
+        Create a new iterator for a dataset.
+        """
+
+        _lang1, _lang2 = (lang1, lang2) if lang1 < lang2 else (lang2, lang1)
+        iterator = self.data['para'][(_lang1, _lang2,domain)][data_set].get_iterator(
+            shuffle=True,
+            group_by_size=True,
+            n_sentences=n_samples
+        )
+
+        for batch in iterator:
+            yield batch if lang2 is None or lang1 < lang2 else batch[::-1]
+
+    def get_grad_sim(self, grad1,grad2):
+
+        cosine_prod, cosine_norm, dev_cosine_norm = 0, 0, 0
+
+        assert len(grad1)==len(grad2)
+        grad1 = ( g1 for g1 in grad1 if g1 is not None )
+        grad2 = ( g2 for g2 in grad2 if g2 is not None )
+
+
+        for g1, g2 in zip(grad1,grad2):
+            cosine_prod += (g1 * g2).sum().item()
+            cosine_norm += g1.norm(2) ** 2
+            dev_cosine_norm += g2.norm(2) ** 2
+
+        cosine_sim = cosine_prod / ((cosine_norm * dev_cosine_norm) ** 0.5 + 1e-10)
+        return cosine_sim.item(), cosine_norm, dev_cosine_norm
+
+    def update_sampling_distribution(self, logits):
+        for i, l in enumerate(logits):
+            if logits[i] < 0:
+                logits[i] = 0
+        if sum(logits) == 0:
+            logits = [0.1 for _ in range(len(logits))]
+        p = np.array(logits) / sum(logits)
+        # self.alpha_p == 0 in the paper
+        self.p = p
+        logger.info("final probs")
+        logger.info(self.p)
+
+
+    def update_dataset_ratio(self,trainer):
+
+        # mainly de-en testing.
+        lang1, lang2 = self.params.mt_steps[0]
+
+        for ratio, domain in zip(self.p,self.domains):
+            trainer.data['para'][(lang1, lang2, domain)]['train'].ratio = ratio
+
+    def update_language_sampler_multidomain(self):
+        """Update the distribution to sample languages """
+        # calculate gradient direction
+        # calculate dev grad
+        # Initialize dev data iterator
+        from itertools import chain
+        # #dev dataset x #train dataset
+        all_sim_list = []
+
+        # mainly de-en testing.
+        lang1, lang2 = self.params.mt_steps[0]
+
+        for domain in self.domains:
+
+            num_of_sample = 8
+            train_set = self.get_iterator_by_sample('train',lang1,lang2, domain,num_of_sample)
+            train_batch = next(train_set)
+
+            train_loss = self.mt_step_by_domain(lang1,lang2,train_batch)
+
+            g_train = grad(train_loss,chain(self.encoder.parameters(),self.decoder.parameters()),allow_unused=True)
+            g_train = [ g for g in g_train if g is not None ]
+            g_dev = []
+            sim_list = []
+            for valid_domain in self.domains:
+
+                valid_set = self.get_iterator_by_sample('valid',lang1,lang2, valid_domain,num_of_sample)
+                valid_batch = next(valid_set)
+
+                valid_loss = self.mt_step_by_domain(lang1, lang2, valid_batch)
+                tmp_g_dev = grad(valid_loss,chain(self.encoder.parameters(),self.decoder.parameters()),allow_unused=True)
+                tmp_g_dev = [g for g in tmp_g_dev if g is not None]
+                if len(g_dev) > 0:
+                    g_dev = [ g_1 + g_2 for g_1, g_2 in zip(g_dev, tmp_g_dev)]
+                else:
+                    g_dev = tmp_g_dev
+                sim, *_ = self.get_grad_sim(g_dev,g_train)
+                sim_list.append(sim)
+            all_sim_list.append(sim_list)
+            torch.cuda.empty_cache()
+        # ave
+        sim_list = np.mean(np.array(all_sim_list), axis=0).tolist()
+
+        feature = torch.ones(1,len(self.domains))
+        grad_scale = torch.FloatTensor(sim_list).view(1, -1)
+
+        feature = feature.cuda()
+        grad_scale = grad_scale.cuda()
+
+        for _ in range(self.params.data_actor_optim_step):
+            a_logits = self.data_actor.forward(feature)
+            loss = -torch.nn.functional.log_softmax(a_logits, dim=-1)
+            if self.params.scale_reward:
+                loss = loss * torch.softmax(a_logits, dim=-1).data
+            loss = (loss * grad_scale).sum()
+            loss.backward()
+            self.data_optimizer.step()
+            self.data_optimizer.zero_grad()
+        with torch.no_grad():
+            a_logits = self.data_actor.forward(feature)
+            prob = torch.nn.functional.softmax(a_logits, dim=-1)
+            sim_list = [i for i in prob.data.view(-1).cpu().numpy()]
+
+        self.update_sampling_distribution(sim_list)
+        #self.update_dataset_ratio()
