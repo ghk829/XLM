@@ -17,6 +17,7 @@ from torch.nn import functional as F
 from torch.nn.utils import clip_grad_norm_
 from torch.autograd import grad
 import apex
+import random
 
 from .optim import get_optimizer
 from .utils import to_cuda, concat_batches, find_modules
@@ -981,8 +982,7 @@ class MultiDomainTrainer(Trainer):
         self.p = params.prior_ratios
 
         from itertools import cycle
-        self.domain_cycle = cycle(self.domains)
-        self.domain = next(self.domain_cycle)
+        self.domains = cycle(self.domains)
 
         data_actor = BaseActor(len(params.domains))
         self.data_actor = data_actor.cuda()
@@ -1089,17 +1089,15 @@ class MultiDomainTrainer(Trainer):
         """
         assert lang1 in self.params.langs
         assert lang2 is None or lang2 in self.params.langs
+        domain = random.choices(self.domains, weights=self.p,k=1)[0]
 
-        iterator = self.iterators.get((iter_name, lang1, lang2, self.domain), None)
+        iterator = self.iterators.get((iter_name, lang1, lang2, domain), None)
 
         if iterator is None:
-            iterator = self.get_iterator(iter_name, lang1, lang2, self.domain)
+            iterator = self.get_iterator(iter_name, lang1, lang2, domain)
         try:
             x = next(iterator)
         except StopIteration:
-            domain = next(self.domain_cycle)
-            logger.info(f'NEXT DOMAIN is {domain}')
-            self.domain = domain
             iterator = self.get_iterator(iter_name, lang1, lang2, domain)
             x = next(iterator)
         return x if lang2 is None or lang1 < lang2 else x[::-1]
