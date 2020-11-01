@@ -1057,7 +1057,6 @@ class MultiDomainEvaluator(Evaluator):
             train_batch = next(train_set)
 
             train_enc = self.get_enc_by_domain(lang1,lang2,train_batch)
-
             g_dev = []
             sim_list = []
             for valid_domain in self.domains:
@@ -1067,7 +1066,7 @@ class MultiDomainEvaluator(Evaluator):
 
                 valid_enc = self.get_enc_by_domain(lang1, lang2, valid_batch)
 
-                sim = torch.nn.functional.cosine_similarity(train_enc,valid_enc,dim=1).mean(dim=-1)
+                sim = torch.nn.functional.cosine_similarity(train_enc.mean(dim=1),valid_enc.mean(dim=1),dim=1)
                 sim_list.append(sim)
             all_sim_list.append(sim_list)
             torch.cuda.empty_cache()
