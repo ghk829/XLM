@@ -912,6 +912,20 @@ class MultiDomainEvaluator(Evaluator):
         #for ratio, domain in zip(self.p,self.domains):
         #    trainer.data['para'][(lang1, lang2, domain)]['train'].ratio = ratio
 
+    def reset_dataset_ratio(self,trainer):
+
+        data_actor = BaseActor(len(self.params.domains))
+        self.data_actor = data_actor.cuda()
+        self.data_optimizer = torch.optim.Adam([p for p in self.data_actor.parameters() if p.requires_grad],
+                                               lr=self.params.data_actor_lr)
+
+        self.p = [1 / len(self.params.domains) for _ in self.params.domains]
+
+        if type(trainer) == torch.nn.parallel.DistributedDataParallel:
+            trainer.module.p = self.p
+        else:
+            trainer.p = self.p
+
     def update_language_sampler_multidomain(self):
         """Update the distribution to sample languages """
         # calculate gradient direction
