@@ -1067,7 +1067,7 @@ class MultiDomainEvaluator(Evaluator):
                 valid_enc = self.get_enc_by_domain(lang1, lang2, valid_batch)
 
                 sim = torch.nn.functional.cosine_similarity(train_enc.mean(dim=1),valid_enc.mean(dim=1),dim=1)
-                sim_list.append(sim)
+                sim_list.append(sim.cpu().detach().numpy())
             all_sim_list.append(sim_list)
             torch.cuda.empty_cache()
         # ave
