@@ -855,6 +855,45 @@ class MultiDomainEvaluator(Evaluator):
 
         return loss
 
+
+    def get_enc_by_domain(self, lang1, lang2, batch):
+        """
+        Machine translation step.
+        Can also be used for denoising auto-encoding.
+        """
+
+        params = self.params
+
+        encoder = self.encoder.module if params.multi_gpu else self.encoder
+        decoder = self.decoder.module if params.multi_gpu else self.decoder
+
+        encoder.train()
+        decoder.train()
+
+        lang1_id = params.lang2id[lang1]
+        lang2_id = params.lang2id[lang2]
+
+        # generate batch
+        (x1, len1), (x2, len2) = batch
+        langs1 = x1.clone().fill_(lang1_id)
+        langs2 = x2.clone().fill_(lang2_id)
+
+        # target words to predict
+        alen = torch.arange(len2.max(), dtype=torch.long, device=len2.device)
+        pred_mask = alen[:, None] < len2[None] - 1  # do not predict anything given the last target word
+        y = x2[1:].masked_select(pred_mask[:-1])
+        assert len(y) == (len2 - 1).sum().item()
+
+        # cuda
+        x1, len1, langs1, x2, len2, langs2, y = to_cuda(x1, len1, langs1, x2, len2, langs2, y)
+
+        # encode source sentence
+        enc1 = encoder('fwd', x=x1, lengths=len1, langs=langs1, causal=False)
+        enc1 = enc1.transpose(0, 1)
+
+        return enc1
+
+
     def get_iterator_by_sample(self, data_set, lang1, lang2, domain, n_samples=-1):
         """
         Create a new iterator for a dataset.
@@ -994,3 +1033,65 @@ class MultiDomainEvaluator(Evaluator):
 
         self.update_sampling_distribution(sim_list)
         #self.update_dataset_ratio()
+
+
+    def update_language_sampler_multidomain(self):
+        """Update the distribution to sample languages """
+        # calculate gradient direction
+        # calculate dev grad
+        # Initialize dev data iterator
+        from itertools import chain
+        # #dev dataset x #train dataset
+        all_sim_list = []
+
+        # mainly de-en testing.
+        lang1, lang2 = self.params.mt_steps[0]
+
+        encoder = self.encoder.module if self.params.multi_gpu else self.encoder
+        decoder = self.decoder.module if self.params.multi_gpu else self.decoder
+
+        for domain in self.domains:
+
+            num_of_sample = 8
+            train_set = self.get_iterator_by_sample('train',lang1,lang2, domain,num_of_sample)
+            train_batch = next(train_set)
+
+            train_enc = self.get_enc_by_domain(lang1,lang2,train_batch)
+
+            g_dev = []
+            sim_list = []
+            for valid_domain in self.domains:
+
+                valid_set = self.get_iterator_by_sample('valid',lang1,lang2, valid_domain,num_of_sample)
+                valid_batch = next(valid_set)
+
+                valid_enc = self.get_enc_by_domain(lang1, lang2, valid_batch)
+
+                sim = torch.nn.functional.cosine_similarity(train_enc,valid_enc,dim=1).mean(dim=-1)
+                sim_list.append(sim)
+            all_sim_list.append(sim_list)
+            torch.cuda.empty_cache()
+        # ave
+        sim_list = np.mean(np.array(all_sim_list), axis=0).tolist()
+
+        feature = torch.ones(1,len(self.domains))
+        grad_scale = torch.FloatTensor(sim_list).view(1, -1)
+
+        feature = feature.cuda()
+        grad_scale = grad_scale.cuda()
+
+        for _ in range(self.params.data_actor_optim_step):
+            a_logits = self.data_actor.forward(feature)
+            loss = -torch.nn.functional.log_softmax(a_logits, dim=-1)
+            if self.params.scale_reward:
+                loss = loss * torch.softmax(a_logits, dim=-1).data
+            loss = (loss * grad_scale).sum()
+            loss.backward()
+            self.data_optimizer.step()
+            self.data_optimizer.zero_grad()
+        with torch.no_grad():
+            a_logits = self.data_actor.forward(feature)
+            prob = torch.nn.functional.softmax(a_logits, dim=-1)
+            sim_list = [i for i in prob.data.view(-1).cpu().numpy()]
+
+        self.update_sampling_distribution(sim_list)
