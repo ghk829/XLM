@@ -1071,7 +1071,7 @@ class MultiDomainEvaluator(Evaluator):
             all_sim_list.append(sim_list)
             torch.cuda.empty_cache()
         # ave
-        sim_list = np.concatenate(all_sim_list,axis=0).mean(axis=0).tolist() #np.mean(np.array(all_sim_list), axis=0).tolist()
+        sim_list = np.array(all_sim_list).mean(axis=-1).mean(axis=0).tolist()
 
         feature = torch.ones(1,len(self.domains))
         grad_scale = torch.FloatTensor(sim_list).view(1, -1)
