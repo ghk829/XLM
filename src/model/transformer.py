@@ -280,6 +280,9 @@ class MetaLinear(nn.Linear):
     def fast_forward(self, x, weights, bias):
         return F.linear(x, weights, bias)
 
+from typing import Union, List
+from torch import Tensor, Size
+_shape_t = Union[int, List[int], Size]
 
 class MetaLayerNorm(nn.LayerNorm):
 
@@ -304,6 +307,42 @@ def get_names_from_fast(fast_params):
     names = [ (n,n2) for n, p in fast_params.items() for n2,p2 in p.items() ]
     return names
 
+def cast_int(x):
+    try:
+        x = int(x)
+    except:
+        pass
+    return x
+
+def construct_fast_params(named_parameters):
+    fast_params = {}
+
+    def construct(fast_params, named_parameters):
+        n, p = named_parameters
+        head, *tail = n.split('.')
+        if len(tail) == 0:
+            fast_params[head] = p
+            return fast_params
+        else:
+            head = cast_int(head)
+            fast_params[head] = fast_params.get(head, {})
+            return construct(fast_params[head], ['.'.join(tail), p])
+
+    for n, p in named_parameters:
+        construct(fast_params, [n, p])
+
+    return fast_params
+
+def deconstruct_fast_params(fast_params, named_params):
+    result = []
+    for named in named_params:
+        names = named.split('.')
+        tmp = fast_params
+        for name in names:
+            name = cast_int(name)
+            tmp = tmp[name]
+        result.append(tmp)
+    return result
 
 import itertools
 from collections import defaultdict
