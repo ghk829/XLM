@@ -314,8 +314,11 @@ def cast_int(x):
         pass
     return x
 
+
+from collections import OrderedDict
+
 def construct_fast_params(named_parameters):
-    fast_params = {}
+    fast_params = OrderedDict()
 
     def construct(fast_params, named_parameters):
         n, p = named_parameters
@@ -325,7 +328,7 @@ def construct_fast_params(named_parameters):
             return fast_params
         else:
             head = cast_int(head)
-            fast_params[head] = fast_params.get(head, {})
+            fast_params[head] = fast_params.get(head, OrderedDict())
             return construct(fast_params[head], ['.'.join(tail), p])
 
     for n, p in named_parameters:
