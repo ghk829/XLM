@@ -146,6 +146,52 @@ class PredLayer(nn.Module):
         return self.proj.log_prob(x) if self.asm else self.proj(x)
 
 
+
+class MetaPredLayer(nn.Module):
+    """
+    Prediction layer (cross_entropy or adaptive_softmax).
+    """
+    def __init__(self, params):
+        super().__init__()
+        self.asm = params.asm
+        self.n_words = params.n_words
+        self.pad_index = params.pad_index
+        dim = params.emb_dim
+
+        if params.asm is False:
+            self.proj = MetaLinear(dim, params.n_words, bias=True)
+        else:
+            self.proj = nn.AdaptiveLogSoftmaxWithLoss(
+                in_features=dim,
+                n_classes=params.n_words,
+                cutoffs=params.asm_cutoffs,
+                div_value=params.asm_div_value,
+                head_bias=True,  # default is False
+            )
+
+    def forward(self, x, y, get_scores=False,params=None):
+        """
+        Compute the loss, and optionally the scores.
+        """
+        assert (y == self.pad_index).sum().item() == 0
+
+        if self.asm is False:
+            scores = self.proj(x,params).view(-1, self.n_words)
+            loss = F.cross_entropy(scores, y, reduction='mean')
+        else:
+            _, loss = self.proj(x, y)
+            scores = self.proj.log_prob(x) if get_scores else None
+
+        return scores, loss
+
+    def get_scores(self, x,params):
+        """
+        Compute scores.
+        """
+        assert x.dim() == 2
+        return self.proj.log_prob(x) if self.asm else self.proj(x,params)
+
+
 class MultiHeadAttention(nn.Module):
 
     NEW_ID = itertools.count()
@@ -217,6 +263,131 @@ class MultiHeadAttention(nn.Module):
         context = unshape(context)                                            # (bs, qlen, dim)
 
         return self.out_lin(context)
+
+
+class MetaLinear(nn.Linear):
+
+    def __init__(self, in_features: int, out_features: int, bias: bool = True):
+
+        super(MetaLinear, self, ).__init__(in_features, out_features, bias)
+
+    def forward(self, input, params=None):
+        if params is None:
+            return super().forward(input)
+        else:
+            return self.fast_forward(input, params['weight'], params['bias'])
+
+    def fast_forward(self, x, weights, bias):
+        return F.linear(x, weights, bias)
+
+
+class MetaLayerNorm(nn.LayerNorm):
+
+    def __init__(self, normalized_shape: _shape_t, eps: float = 1e-5, elementwise_affine: bool = True):
+
+        super(MetaLayerNorm, self, ).__init__(normalized_shape, eps, elementwise_affine)
+
+    def forward(self, input, params=None):
+        if params is None:
+            return super().forward(input)
+        else:
+            return self.fast_forward(input, params.get('weight'), params.get('bias'))
+
+    def fast_forward(self, x, weights, bias):
+        return F.layer_norm(
+            x, self.normalized_shape, weights, bias, self.eps)
+
+def get_params_from_fast(fast_params):
+    parameters = [ p2 for n,p in fast_params.items() for n2,p2 in p.items() ]
+    return parameters
+def get_names_from_fast(fast_params):
+    names = [ (n,n2) for n, p in fast_params.items() for n2,p2 in p.items() ]
+    return names
+
+
+import itertools
+from collections import defaultdict
+
+
+class MetaMultiHeadAttention(nn.Module):
+    NEW_ID = itertools.count()
+
+    def __init__(self, n_heads, dim, dropout):
+        super().__init__()
+        self.layer_id = next(MetaMultiHeadAttention.NEW_ID)
+        self.dim = dim
+        self.n_heads = n_heads
+        self.dropout = dropout
+        assert self.dim % self.n_heads == 0
+
+        self.q_lin = MetaLinear(dim, dim)
+        self.k_lin = MetaLinear(dim, dim)
+        self.v_lin = MetaLinear(dim, dim)
+        self.out_lin = MetaLinear(dim, dim)
+
+    def get_fast_params(self, ):
+        fast_params = defaultdict(lambda: defaultdict(str))
+        for n, p in self.named_parameters():
+            fast_params[n.split('.')[0]][n.split('.')[1]] = p
+        return fast_params
+
+    def forward(self, input, mask, kv=None, cache=None, fast_params=None):
+        """
+        Self-attention (if kv is None) or attention over source sentence (provided by kv).
+        """
+        from collections import defaultdict
+        if fast_params is None:
+            fast_params = defaultdict(lambda: None)
+        # Input is (bs, qlen, dim)
+        # Mask is (bs, klen) (non-causal) or (bs, klen, klen)
+        bs, qlen, dim = input.size()
+        if kv is None:
+            klen = qlen if cache is None else cache['slen'] + qlen
+        else:
+            klen = kv.size(1)
+        assert dim == self.dim, 'Dimensions do not match: %s input vs %s configured' % (dim, self.dim)
+        n_heads = self.n_heads
+        dim_per_head = dim // n_heads
+        mask_reshape = (bs, 1, qlen, klen) if mask.dim() == 3 else (bs, 1, 1, klen)
+
+        def shape(x):
+            """  projection """
+            return x.view(bs, -1, self.n_heads, dim_per_head).transpose(1, 2)
+
+        def unshape(x):
+            """  compute context """
+            return x.transpose(1, 2).contiguous().view(bs, -1, self.n_heads * dim_per_head)
+
+        q = shape(self.q_lin(input, fast_params['q_lin']))  # (bs, n_heads, qlen, dim_per_head)
+        if kv is None:
+            k = shape(self.k_lin(input, fast_params['k_lin']))  # (bs, n_heads, qlen, dim_per_head)
+            v = shape(self.v_lin(input, fast_params['v_lin']))  # (bs, n_heads, qlen, dim_per_head)
+        elif cache is None or self.layer_id not in cache:
+            k = v = kv
+            k = shape(self.k_lin(k, fast_params['k_lin']))  # (bs, n_heads, qlen, dim_per_head)
+            v = shape(self.v_lin(v, fast_params['v_lin']))  # (bs, n_heads, qlen, dim_per_head)
+
+        if cache is not None:
+            if self.layer_id in cache:
+                if kv is None:
+                    k_, v_ = cache[self.layer_id]
+                    k = torch.cat([k_, k], dim=2)  # (bs, n_heads, klen, dim_per_head)
+                    v = torch.cat([v_, v], dim=2)  # (bs, n_heads, klen, dim_per_head)
+                else:
+                    k, v = cache[self.layer_id]
+            cache[self.layer_id] = (k, v)
+
+        q = q / math.sqrt(dim_per_head)  # (bs, n_heads, qlen, dim_per_head)
+        scores = torch.matmul(q, k.transpose(2, 3))  # (bs, n_heads, qlen, klen)
+        mask = (mask == 0).view(mask_reshape).expand_as(scores)  # (bs, n_heads, qlen, klen)
+        scores.masked_fill_(mask, -float('inf'))  # (bs, n_heads, qlen, klen)
+
+        weights = F.softmax(scores.float(), dim=-1).type_as(scores)  # (bs, n_heads, qlen, klen)
+        weights = F.dropout(weights, p=self.dropout, training=self.training)  # (bs, n_heads, qlen, klen)
+        context = torch.matmul(weights, v)  # (bs, n_heads, qlen, dim_per_head)
+        context = unshape(context)  # (bs, qlen, dim)
+
+        return self.out_lin(context, fast_params['out_lin'])
 
 class MultiSegmentHeadAttention(nn.Module):
 
@@ -425,6 +596,22 @@ class TransformerFFN(nn.Module):
         x = F.dropout(x, p=self.dropout, training=self.training)
         return x
 
+class MetaTransformerFFN(nn.Module):
+
+    def __init__(self, in_dim, dim_hidden, out_dim, dropout, gelu_activation):
+        super().__init__()
+
+        self.dropout = dropout
+        self.lin1 = MetaLinear(in_dim, dim_hidden)
+        self.lin2 = MetaLinear(dim_hidden, out_dim)
+        self.act = gelu if gelu_activation else F.relu
+
+    def forward(self, input,params=None):
+        x = self.lin1(input,params['lin1'])
+        x = self.act(x)
+        x = self.lin2(x,params['lin2'])
+        x = F.dropout(x, p=self.dropout, training=self.training)
+        return x
 
 class TransformerModel(nn.Module):
 
@@ -1001,3 +1188,15 @@ class BeamHypotheses(object):
             return True
         else:
             return self.worst_score >= best_sum_logprobs / self.max_len ** self.length_penalty
+
+
+class MetaTransformerModel(TransformerModel):
+
+    def __init__(self, params, dico, is_encoder, with_output):
+        super().__init__(params, dico, is_encoder, with_output)
+
+    def fwd(self):
+        pass
+
+    def predict(self):
+        pass

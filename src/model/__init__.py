@@ -139,9 +139,17 @@ def build_model(params, dico):
         return model.cuda()
 
     else:
-        # build
-        encoder = TransformerModel(params, dico, is_encoder=True, with_output=True)  # TODO: only output when necessary - len(params.clm_steps + params.mlm_steps) > 0
-        decoder = TransformerModel(params, dico, is_encoder=False, with_output=True)
+
+        if params.meta_learning:
+            from .transformer import MetaTransformerModel
+            # build
+            encoder = MetaTransformerModel(params, dico, is_encoder=True,
+                                       with_output=True)
+            decoder = MetaTransformerModel(params, dico, is_encoder=False, with_output=True)
+        else:
+            # build
+            encoder = TransformerModel(params, dico, is_encoder=True, with_output=True)  # TODO: only output when necessary - len(params.clm_steps + params.mlm_steps) > 0
+            decoder = TransformerModel(params, dico, is_encoder=False, with_output=True)
 
         # reload pretrained word embeddings
         if params.reload_emb != '':
