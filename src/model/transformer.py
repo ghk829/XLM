@@ -376,6 +376,15 @@ def deconstruct_fast_params(fast_params, named_params):
         result.append(tmp)
     return result
 
+def new_fast_params(model,grads,update_rate):
+    def get_grad(g):
+        if g is None:
+            return 0
+        return g
+    new_named_parameters = [ (n,p-update_rate*get_grad(g)) for (n,p), g in zip(model.named_parameters(),grads) ]
+    fast_params = construct_fast_params(new_named_parameters)
+    return fast_params
+
 import itertools
 from collections import defaultdict
 
