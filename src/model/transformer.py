@@ -1366,6 +1366,9 @@ class MetaTransformerModel(TransformerModel):
             assert self.is_decoder
             assert src_enc.size(0) == bs
 
+        if params is None:
+            params = defaultdict(lambda: None)
+
 
         # generate masks
         mask, attn_mask = get_masks(slen, lengths, causal)
@@ -1396,40 +1399,62 @@ class MetaTransformerModel(TransformerModel):
             attn_mask = attn_mask[:, -_slen:]
 
         # embeddings
-        tensor = self.embeddings(x)
-        tensor = tensor + self.position_embeddings(positions).expand_as(tensor)
+        tensor = self.embeddings(x,params.get('embeddings'))
+        tensor = tensor + self.position_embeddings(positions,params.get('position_embeddings')).expand_as(tensor)
         if langs is not None and self.use_lang_emb:
-            tensor = tensor + self.lang_embeddings(langs)
-        tensor = self.layer_norm_emb(tensor)
+            tensor = tensor + self.lang_embeddings(langs,params.get('lang_embeddings'))
+        tensor = self.layer_norm_emb(tensor,params.get('layer_norm_emb'))
         tensor = F.dropout(tensor, p=self.dropout, training=self.training)
         tensor *= mask.unsqueeze(-1).to(tensor.dtype)
-
-        if self.l0_weight:
-            reg_loss = 0
 
         # transformer layers
         for i in range(self.n_layers):
 
+            attn_params = params.get('attentions')
+            layer1_params = params.get('layer_norm1')
+            if attn_params is None:
+                attn_params = defaultdict(lambda : None)
+
+            if layer1_params is None:
+                layer1_params = defaultdict(lambda : None)
+
             # self attention
-            attn = self.attentions[i](tensor, attn_mask, cache=cache)
+            attn = self.attentions[i](tensor, attn_mask, cache=cache,fast_params=attn_params.get(i))
             attn = F.dropout(attn, p=self.dropout, training=self.training)
             tensor = tensor + attn
-            tensor = self.layer_norm1[i](tensor)
+            tensor = self.layer_norm1[i](tensor,layer1_params.get(i))
 
             # encoder attention (for decoder only)
             if self.is_decoder and src_enc is not None:
-                attn = self.encoder_attn[i](tensor, src_mask, kv=src_enc, cache=cache)
+
+                encoder_attn_params = params.get('encoder_attn')
+                layer_norm15_params = params.get('layer_norm15')
+                if encoder_attn_params is None:
+                    encoder_attn_params = defaultdict(lambda: None)
+
+                if layer_norm15_params is None:
+                    layer_norm15_params = defaultdict(lambda: None)
+
+                attn = self.encoder_attn[i](tensor, src_mask, kv=src_enc, cache=cache,fast_params=encoder_attn_params.get(i))
 
                 attn = F.dropout(attn, p=self.dropout, training=self.training)
                 tensor = tensor + attn
-                tensor = self.layer_norm15[i](tensor)
+                tensor = self.layer_norm15[i](tensor,layer_norm15_params.get(i))
 
             # FFN
             if ('%i_in' % i) in self.memories:
                 tensor = tensor + self.memories['%i_in' % i](tensor)
             else:
-                tensor = tensor + self.ffns[i](tensor)
-            tensor = self.layer_norm2[i](tensor)
+                ffns_params = params.get('ffns')
+                if ffns_params is None:
+                    ffns_params = defaultdict(lambda: None)
+
+                tensor = tensor + self.ffns[i](tensor,ffns_params.get(i))
+
+            layer_norm2_params = params.get('layer_norm2')
+            if layer_norm2_params is None:
+                layer_norm2_params = defaultdict(lambda: None)
+            tensor = self.layer_norm2[i](tensor,layer_norm2_params.get(i))
 
             # memory
             if ('%i_after' % i) in self.memories:
