@@ -283,13 +283,17 @@ class MetaLinear(nn.Linear):
 from typing import Optional
 from torch import Tensor
 
-class MetaEmbedding(Embedding):
+class MetaEmbedding(nn.Embedding):
 
     def __init__(self,num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None,
                  max_norm: Optional[float] = None, norm_type: float = 2., scale_grad_by_freq: bool = False,
                  sparse: bool = False, _weight: Optional[Tensor] = None):
         super().__init__(num_embeddings, embedding_dim, padding_idx= None,
                  max_norm= None, norm_type=2., scale_grad_by_freq=False,sparse=False, _weight= None)
+
+        nn.init.normal_(self.weight, mean=0, std=embedding_dim ** -0.5)
+        if padding_idx is not None:
+            nn.init.constant_(self.weight[padding_idx], 0)
 
     def forward(self, input, params=None):
         if params is None:
