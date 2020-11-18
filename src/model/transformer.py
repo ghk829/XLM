@@ -675,9 +675,9 @@ class MetaTransformerFFN(nn.Module):
         self.act = gelu if gelu_activation else F.relu
 
     def forward(self, input,params=None):
-        x = self.lin1(input,params['lin1'])
+        x = self.lin1(input,params.get('lin1'))
         x = self.act(x)
-        x = self.lin2(x,params['lin2'])
+        x = self.lin2(x,params.get('lin2'))
         x = F.dropout(x, p=self.dropout, training=self.training)
         return x
 
@@ -1261,7 +1261,7 @@ class BeamHypotheses(object):
 class MetaTransformerModel(TransformerModel):
 
     def __init__(self, params, dico, is_encoder, with_output):
-        super().__init__(params, dico, is_encoder, with_output)
+        super(MetaTransformerModel,self).__init__(params, dico, is_encoder, with_output)
 
         # encoder / decoder, output layer
         self.is_encoder = is_encoder
