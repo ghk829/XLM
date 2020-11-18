@@ -175,6 +175,9 @@ class MetaPredLayer(nn.Module):
         """
         assert (y == self.pad_index).sum().item() == 0
 
+        if params is None:
+            params = defaultdict(str)
+
         if self.asm is False:
             scores = self.proj(x,params).view(-1, self.n_words)
             loss = F.cross_entropy(scores, y, reduction='mean')
@@ -405,7 +408,7 @@ class MetaMultiHeadAttention(nn.Module):
         """
         from collections import defaultdict
         if fast_params is None:
-            fast_params = defaultdict(lambda: None)
+            fast_params = defaultdict(str)
         # Input is (bs, qlen, dim)
         # Mask is (bs, klen) (non-causal) or (bs, klen, klen)
         bs, qlen, dim = input.size()
@@ -675,6 +678,8 @@ class MetaTransformerFFN(nn.Module):
         self.act = gelu if gelu_activation else F.relu
 
     def forward(self, input,params=None):
+        if params is None:
+            params = defaultdict(str)
         x = self.lin1(input,params.get('lin1'))
         x = self.act(x)
         x = self.lin2(x,params.get('lin2'))
