@@ -408,7 +408,7 @@ class MetaMultiHeadAttention(nn.Module):
         """
         from collections import defaultdict
         if fast_params is None:
-            fast_params = defaultdict(str)
+            fast_params = defaultdict(lambda: None)
         # Input is (bs, qlen, dim)
         # Mask is (bs, klen) (non-causal) or (bs, klen, klen)
         bs, qlen, dim = input.size()
