@@ -1261,7 +1261,7 @@ class BeamHypotheses(object):
 class MetaTransformerModel(TransformerModel):
 
     def __init__(self, params, dico, is_encoder, with_output):
-        super().__init__()
+        super().__init__(params, dico, is_encoder, with_output)
 
         # encoder / decoder, output layer
         self.is_encoder = is_encoder
