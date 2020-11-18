@@ -275,10 +275,32 @@ class MetaLinear(nn.Linear):
         if params is None:
             return super().forward(input)
         else:
-            return self.fast_forward(input, params['weight'], params['bias'])
+            return self.fast_forward(input, params.get('weight'), params.get('bias'))
 
     def fast_forward(self, x, weights, bias):
         return F.linear(x, weights, bias)
+
+from typing import Optional
+from torch import Tensor
+
+class MetaEmbedding(Embedding):
+
+    def __init__(self,num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None,
+                 max_norm: Optional[float] = None, norm_type: float = 2., scale_grad_by_freq: bool = False,
+                 sparse: bool = False, _weight: Optional[Tensor] = None):
+        super().__init__(num_embeddings, embedding_dim, padding_idx= None,
+                 max_norm= None, norm_type=2., scale_grad_by_freq=False,sparse=False, _weight= None)
+
+    def forward(self, input, params=None):
+        if params is None:
+            return super().forward(input)
+        else:
+            return self.fast_forward(input, params.get('weight'))
+
+    def fast_forward(self,input,weight):
+        return F.embedding(
+            input, weight, self.padding_idx, self.max_norm,
+            self.norm_type, self.scale_grad_by_freq, self.sparse)
 
 from typing import Union, List
 from torch import Tensor, Size
@@ -1235,10 +1257,186 @@ class BeamHypotheses(object):
 class MetaTransformerModel(TransformerModel):
 
     def __init__(self, params, dico, is_encoder, with_output):
-        super().__init__(params, dico, is_encoder, with_output)
+        super().__init__()
 
-    def fwd(self):
-        pass
+        # encoder / decoder, output layer
+        self.is_encoder = is_encoder
+        self.is_decoder = not is_encoder
+        self.with_output = with_output
+
+        # dictionary / languages
+        self.n_langs = params.n_langs
+        self.n_words = params.n_words
+        self.eos_index = params.eos_index
+        self.pad_index = params.pad_index
+        self.dico = dico
+        self.id2lang = params.id2lang
+        self.lang2id = params.lang2id
+        self.use_lang_emb = getattr(params, 'use_lang_emb', True)
+        assert len(self.dico) == self.n_words
+        assert len(self.id2lang) == len(self.lang2id) == self.n_langs
+
+        # model parameters
+        self.dim = params.emb_dim  # 512 by default
+        self.hidden_dim = self.dim * 4  # 2048 by default
+        self.n_heads = params.n_heads  # 8 by default
+        self.n_layers = params.n_layers
+        self.dropout = params.dropout
+        self.attention_dropout = params.attention_dropout
+
+        assert self.dim % self.n_heads == 0, 'transformer dim must be a multiple of n_heads'
+
+        # embeddings
+        self.position_embeddings = MetaEmbedding(N_MAX_POSITIONS, self.dim)
+        if params.sinusoidal_embeddings:
+            create_sinusoidal_embeddings(N_MAX_POSITIONS, self.dim, out=self.position_embeddings.weight)
+        if params.n_langs > 1 and self.use_lang_emb:
+            self.lang_embeddings = MetaEmbedding(self.n_langs, self.dim)
+        self.embeddings = MetaEmbedding(self.n_words, self.dim, padding_idx=self.pad_index)
+        self.layer_norm_emb = MetaLayerNorm(self.dim, eps=1e-12)
+
+        # transformer layers
+        self.attentions = nn.ModuleList()
+        self.layer_norm1 = nn.ModuleList()
+        self.ffns = nn.ModuleList()
+        self.layer_norm2 = nn.ModuleList()
+        if self.is_decoder:
+            self.layer_norm15 = nn.ModuleList()
+            self.encoder_attn = nn.ModuleList()
+
+        # memories
+        self.memories = nn.ModuleDict()
+        if getattr(params, 'use_memory', False):
+            mem_positions = params.mem_enc_positions if is_encoder else params.mem_dec_positions
+            for layer_id, pos in mem_positions:
+                assert 0 <= layer_id <= params.n_layers - 1
+                assert pos in ['in', 'after']
+                self.memories['%i_%s' % (layer_id, pos)] = HashingMemory.build(self.dim, self.dim, params)
+
+        for layer_id in range(self.n_layers):
+            attention = MetaMultiHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout)
+            self.attentions.append(attention)
+            self.layer_norm1.append(MetaLayerNorm(self.dim, eps=1e-12))
+            if self.is_decoder:
+                self.layer_norm15.append(MetaLayerNorm(self.dim, eps=1e-12))
+
+                attention = MetaMultiHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout)
+                self.encoder_attn.append(attention)
+            if ('%i_in' % layer_id) in self.memories:
+                self.ffns.append(None)
+            else:
+                self.ffns.append(MetaTransformerFFN(self.dim, self.hidden_dim, self.dim, dropout=self.dropout,
+                                                gelu_activation=params.gelu_activation))
+            self.layer_norm2.append(MetaLayerNorm(self.dim, eps=1e-12))
+
+        # output layer
+        if self.with_output:
+            self.pred_layer = MetaPredLayer(params)
+            if params.share_inout_emb:
+                self.pred_layer.proj.weight = self.embeddings.weight
+
+    def fwd(self, x, lengths, causal, src_enc=None, src_len=None, positions=None, langs=None, cache=None, params=None):
+        """
+        Inputs:
+            `x` LongTensor(slen, bs), containing word indices
+            `lengths` LongTensor(bs), containing the length of each sentence
+            `causal` Boolean, if True, the attention is only done over previous hidden states
+            `positions` LongTensor(slen, bs), containing word positions
+            `langs` LongTensor(slen, bs), containing language IDs
+        """
+        # lengths = (x != self.pad_index).float().sum(dim=1)
+        # mask = x != self.pad_index
+
+        # check inputs
+        slen, bs = x.size()
+        assert lengths.size(0) == bs
+        assert lengths.max().item() <= slen
+        x = x.transpose(0, 1)  # batch size as dimension 0
+        assert (src_enc is None) == (src_len is None)
+        if src_enc is not None:
+            assert self.is_decoder
+            assert src_enc.size(0) == bs
+
+
+        # generate masks
+        mask, attn_mask = get_masks(slen, lengths, causal)
+        if self.is_decoder and src_enc is not None:
+            src_mask = torch.arange(src_len.max(), dtype=torch.long, device=lengths.device) < src_len[:, None]
+
+        # positions
+        if positions is None:
+            positions = x.new(slen).long()
+            positions = torch.arange(slen, out=positions).unsqueeze(0)
+        else:
+            assert positions.size() == (slen, bs)
+            positions = positions.transpose(0, 1)
+
+        # langs
+        if langs is not None:
+            assert langs.size() == (slen, bs)
+            langs = langs.transpose(0, 1)
+
+        # do not recompute cached elements
+        if cache is not None:
+            _slen = slen - cache['slen']
+            x = x[:, -_slen:]
+            positions = positions[:, -_slen:]
+            if langs is not None:
+                langs = langs[:, -_slen:]
+            mask = mask[:, -_slen:]
+            attn_mask = attn_mask[:, -_slen:]
+
+        # embeddings
+        tensor = self.embeddings(x)
+        tensor = tensor + self.position_embeddings(positions).expand_as(tensor)
+        if langs is not None and self.use_lang_emb:
+            tensor = tensor + self.lang_embeddings(langs)
+        tensor = self.layer_norm_emb(tensor)
+        tensor = F.dropout(tensor, p=self.dropout, training=self.training)
+        tensor *= mask.unsqueeze(-1).to(tensor.dtype)
+
+        if self.l0_weight:
+            reg_loss = 0
+
+        # transformer layers
+        for i in range(self.n_layers):
+
+            # self attention
+            attn = self.attentions[i](tensor, attn_mask, cache=cache)
+            attn = F.dropout(attn, p=self.dropout, training=self.training)
+            tensor = tensor + attn
+            tensor = self.layer_norm1[i](tensor)
+
+            # encoder attention (for decoder only)
+            if self.is_decoder and src_enc is not None:
+                attn = self.encoder_attn[i](tensor, src_mask, kv=src_enc, cache=cache)
+
+                attn = F.dropout(attn, p=self.dropout, training=self.training)
+                tensor = tensor + attn
+                tensor = self.layer_norm15[i](tensor)
+
+            # FFN
+            if ('%i_in' % i) in self.memories:
+                tensor = tensor + self.memories['%i_in' % i](tensor)
+            else:
+                tensor = tensor + self.ffns[i](tensor)
+            tensor = self.layer_norm2[i](tensor)
+
+            # memory
+            if ('%i_after' % i) in self.memories:
+                tensor = tensor + self.memories['%i_after' % i](tensor)
+            # TODO: add extra layer norm here?
+
+            tensor *= mask.unsqueeze(-1).to(tensor.dtype)
+
+        # update cache length
+        if cache is not None:
+            cache['slen'] += tensor.size(1)
+
+        # move back sequence length to dimension 0
+        tensor = tensor.transpose(0, 1)
+
+        return tensor
 
     def predict(self):
         pass
