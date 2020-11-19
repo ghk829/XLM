@@ -175,9 +175,6 @@ class MetaPredLayer(nn.Module):
         """
         assert (y == self.pad_index).sum().item() == 0
 
-        if params is None:
-            params = defaultdict(str)
-
         if self.asm is False:
             scores = self.proj(x,params).view(-1, self.n_words)
             loss = F.cross_entropy(scores, y, reduction='mean')
