@@ -1254,10 +1254,10 @@ class MetaMultiDomainEvaluator(MultiDomainEvaluator):
                 encoder_named_parameters = [(n, p) for n, p in zip(encoder_named_params, encoder_parameters)]
                 decoder_named_parameters = [(n, p) for n, p in zip(decoder_named_params, decoder_parameters)]
 
-                new_named_parameters = new_fast_params(encoder_named_parameters, encoder_grads, self.update_rate)
-                encoder_fast_params = construct_fast_params(new_named_parameters)
-                new_named_parameters = new_fast_params(decoder_named_parameters, decoder_grads, self.update_rate)
-                decoder_fast_params = construct_fast_params(new_named_parameters)
+                encoder_named_parameters = new_fast_params(encoder_named_parameters, encoder_grads, self.update_rate)
+                encoder_fast_params = construct_fast_params(encoder_named_parameters)
+                decoder_named_parameters = new_fast_params(decoder_named_parameters, decoder_grads, self.update_rate)
+                decoder_fast_params = construct_fast_params(decoder_named_parameters)
 
                 if i == self.inner_loop - 1:
                     enc1 = encoder('fwd', x=x1, lengths=len1, langs=langs1, causal=False, params=encoder_fast_params)
