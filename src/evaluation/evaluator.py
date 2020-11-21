@@ -1228,9 +1228,9 @@ class MetaMultiDomainEvaluator(MultiDomainEvaluator):
             # # loss
             # word_scores, loss = decoder('predict', tensor=dec2, pred_mask=pred_mask, y=y, get_scores=True)
 
-            encoder_named_parameters = [(n, p) for n, p in self.encoder.named_parameters()]
-            decoder_named_parameters = [(n, p) for n, p in self.decoder.named_parameters()] + [
-                ('pred_layer.proj.weight', self.decoder.pred_layer.proj.weight)]  # bug fix
+            encoder_named_parameters = [(n, p) for n, p in encoder.named_parameters()]
+            decoder_named_parameters = [(n, p) for n, p in decoder.named_parameters()] + [
+                ('pred_layer.proj.weight', decoder.pred_layer.proj.weight)]  # bug fix
             encoder_fast_params = construct_fast_params(encoder_named_parameters)
             decoder_fast_params = construct_fast_params(decoder_named_parameters)
             encoder_named_params = [n for n, p in encoder_named_parameters]
@@ -1270,15 +1270,11 @@ class MetaMultiDomainEvaluator(MultiDomainEvaluator):
                     _, loss = decoder('predict', tensor=dec2, pred_mask=pred_mask, y=y, get_scores=False,
                                       params=decoder_fast_params['pred_layer']['proj'])
 
-                    # g_train = grad(loss, chain(encoder.parameters(),decoder.parameters()),allow_unused=True)
                     self.meta_optim.zero_grad()
+                    meta_grads = grad(loss, chain(encoder.parameters(),decoder.parameters()),allow_unused=True)
+                    for w, g in zip(chain(encoder.parameters(),decoder.parameters()), meta_grads):
+                        if g:
+                            w.grad = g
+
                     loss.backward()
                     self.meta_optim.step()
-
-                    del encoder_parameters
-                    del decoder_parameters
-                    del encoder_grads
-                    del decoder_grads
-                    del encoder_named_parameters
-                    del decoder_named_parameters
-                    torch.cuda.empty_cache()
