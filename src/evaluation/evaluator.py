@@ -1248,11 +1248,11 @@ class MetaMultiDomainEvaluator(MultiDomainEvaluator):
                 encoder_parameters = deconstruct_fast_params(encoder_fast_params, encoder_named_params)
                 decoder_parameters = deconstruct_fast_params(decoder_fast_params, decoder_named_params)
 
-                encoder_named_parameters = [(n, p) for n, p in zip(encoder_named_params, encoder_parameters)]
-                decoder_named_parameters = [(n, p) for n, p in zip(decoder_named_params, decoder_parameters)]
-
                 encoder_grads = grad(loss, encoder_parameters, allow_unused=True, retain_graph=True)
                 decoder_grads = grad(loss, decoder_parameters)
+
+                encoder_named_parameters = [(n, p) for n, p in zip(encoder_named_params, encoder_parameters)]
+                decoder_named_parameters = [(n, p) for n, p in zip(decoder_named_params, decoder_parameters)]
 
                 encoder_fast_params = new_fast_params(encoder_named_parameters, encoder_grads, self.update_rate)
                 decoder_fast_params = new_fast_params(decoder_named_parameters, decoder_grads, self.update_rate)
