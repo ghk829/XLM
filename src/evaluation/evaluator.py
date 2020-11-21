@@ -1266,7 +1266,7 @@ class MetaMultiDomainEvaluator(MultiDomainEvaluator):
                 if i == self.inner_loop - 1:
                     losses.append(loss)
 
-            self.meta_optim.zero_grad()
-            loss = sum(losses) / len(losses)
-            loss.backward()
-            self.meta_optim.step()
+        self.meta_optim.zero_grad()
+        loss = sum(losses) / len(losses)
+        loss.backward()
+        self.meta_optim.step()
