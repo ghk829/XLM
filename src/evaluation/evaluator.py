@@ -1270,9 +1270,18 @@ class MetaMultiDomainEvaluator(MultiDomainEvaluator):
                     _, loss = decoder('predict', tensor=dec2, pred_mask=pred_mask, y=y, get_scores=False,
                                       params=decoder_fast_params['pred_layer']['proj'])
 
+                    # g_train = grad(loss, chain(encoder.parameters(),decoder.parameters()),allow_unused=True)
                     self.meta_optim.zero_grad()
-                    meta_grads = grad(loss, chain(encoder.parameters(),decoder.parameters()),allow_unused=True)
-                    for w, g in zip(chain(encoder.parameters(),decoder.parameters()), meta_grads):
-                        if g is not None:
-                            w.grad = g
+                    loss.backward()
                     self.meta_optim.step()
+
+                    del encoder_parameters
+                    del decoder_parameters
+                    del encoder_grads
+                    del decoder_grads
+                    del encoder_named_parameters
+                    del decoder_named_parameters
+                    del encoder_fast_params
+                    del decoder_fast_params
+                    del loss
+                    torch.cuda.empty_cache()
