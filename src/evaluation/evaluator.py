@@ -1274,4 +1274,11 @@ class MetaMultiDomainEvaluator(MultiDomainEvaluator):
                     self.meta_optim.zero_grad()
                     loss.backward()
                     self.meta_optim.step()
+
+                    del encoder_parameters
+                    del decoder_parameters
+                    del encoder_grads
+                    del decoder_grads
+                    del encoder_named_parameters
+                    del decoder_named_parameters
                     torch.cuda.empty_cache()
