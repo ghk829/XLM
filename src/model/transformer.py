@@ -184,7 +184,7 @@ class MetaPredLayer(nn.Module):
 
         return scores, loss
 
-    def get_scores(self, x,params):
+    def get_scores(self, x,params=None):
         """
         Compute scores.
         """
