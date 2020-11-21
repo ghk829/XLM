@@ -1105,14 +1105,6 @@ class MetaMultiDomainEvaluator(MultiDomainEvaluator):
         """
         super().__init__(trainer, data, params)
 
-        from torch import optim
-        optimizer_parameters = [p for p in self.encoder.parameters() if p.requires_grad] + [p for p in
-                                                                                       self.decoder.parameters() if
-                                                                                       p.requires_grad]
-        self.meta_optim = optim.Adam(optimizer_parameters, lr=0.0001)
-
-
-
         self.update_rate = 0.001
         self.inner_loop = 5
 
@@ -1172,8 +1164,16 @@ class MetaMultiDomainEvaluator(MultiDomainEvaluator):
 
         self.encoder.train()
         self.decoder.train()
+
+        from torch import optim
+
         encoder = self.encoder.module if params.multi_gpu else self.encoder
         decoder = self.decoder.module if params.multi_gpu else self.decoder
+
+        optimizer_parameters = [p for p in encoder.parameters() if p.requires_grad] + [p for p in
+                                                                                            decoder.parameters() if
+                                                                                            p.requires_grad]
+        self.meta_optim = optim.Adam(optimizer_parameters, lr=0.0001)
 
         params = params
         lang1_id = params.lang2id[lang1]
@@ -1260,12 +1260,24 @@ class MetaMultiDomainEvaluator(MultiDomainEvaluator):
                 decoder_fast_params = construct_fast_params(decoder_named_parameters)
 
                 if i == self.inner_loop - 1:
+
+                    from itertools import chain
+
                     enc1 = encoder('fwd', x=x1, lengths=len1, langs=langs1, causal=False, params=encoder_fast_params)
                     enc1 = enc1.transpose(0, 1)
                     dec2 = decoder('fwd', x=x2, lengths=len2, langs=langs2, causal=True, src_enc=enc1, src_len=len1,
                                    params=decoder_fast_params)
                     _, loss = decoder('predict', tensor=dec2, pred_mask=pred_mask, y=y, get_scores=False,
                                       params=decoder_fast_params['pred_layer']['proj'])
+
+                    # g_train = grad(loss, chain(encoder.parameters(),decoder.parameters()),allow_unused=True)
                     self.meta_optim.zero_grad()
                     loss.backward()
                     self.meta_optim.step()
+
+                    del encoder_parameters
+                    del decoder_parameters
+                    del encoder_grads
+                    del decoder_grads
+                    del encoder_named_parameters
+                    del decoder_named_parameters
