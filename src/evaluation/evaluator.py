@@ -1281,3 +1281,4 @@ class MetaMultiDomainEvaluator(MultiDomainEvaluator):
                     del decoder_grads
                     del encoder_named_parameters
                     del decoder_named_parameters
+                    torch.cuda.empty_cache()
