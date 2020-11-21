@@ -1264,9 +1264,6 @@ class MetaMultiDomainEvaluator(MultiDomainEvaluator):
                 _, loss = decoder('predict', tensor=dec2, pred_mask=pred_mask, y=y, get_scores=False,
                                   params=decoder_fast_params['pred_layer']['proj'])
                 if i == self.inner_loop - 1:
-                    losses.append(loss)
-
-        self.meta_optim.zero_grad()
-        loss = sum(losses) / len(losses)
-        loss.backward()
-        self.meta_optim.step()
+                    self.meta_optim.zero_grad()
+                    loss.backward()
+                    self.meta_optim.step()
