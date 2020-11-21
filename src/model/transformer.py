@@ -378,8 +378,8 @@ def new_fast_params(named_parameters,grads,update_rate):
         if g is None:
             return 0
         return g
-    new_named_parameters = [ (n,p-update_rate*get_grad(g)) for (n,p), g in zip(named_parameters,grads) ]
-    return new_named_parameters
+    named_parameters = [ (n,p-update_rate*get_grad(g)) for (n,p), g in zip(named_parameters,grads) ]
+    return named_parameters
 
 import itertools
 from collections import defaultdict
