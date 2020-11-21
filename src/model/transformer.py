@@ -380,6 +380,7 @@ def new_fast_params(named_parameters,grads,update_rate):
         return g
     new_named_parameters = [ (n,p-update_rate*get_grad(g)) for (n,p), g in zip(named_parameters,grads) ]
     fast_params = construct_fast_params(new_named_parameters)
+    del new_named_parameters
     return fast_params
 
 import itertools
