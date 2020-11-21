@@ -1094,3 +1094,179 @@ class MultiDomainEvaluator(Evaluator):
             sim_list = [i for i in prob.data.view(-1).cpu().numpy()]
 
         self.update_sampling_distribution(sim_list)
+
+from ..model.transformer import construct_fast_params, deconstruct_fast_params, new_fast_params
+
+class MetaMultiDomainEvaluator(MultiDomainEvaluator):
+
+    def __init__(self, trainer, data, params):
+        """
+        Build encoder / decoder evaluator.
+        """
+        super().__init__(trainer, data, params)
+
+        from torch import optim
+        optimizer_parameters = [p for p in self.encoder.parameters() if p.requires_grad] + [p for p in
+                                                                                       self.decoder.parameters() if
+                                                                                       p.requires_grad]
+        self.meta_optim = optim.Adam(optimizer_parameters, lr=0.0001)
+
+
+
+        self.update_rate = 0.001
+        self.inner_loop = 5
+
+
+
+    def run_all_evals(self, trainer):
+        """
+        Run all evaluations.
+        """
+        params = self.params
+        scores = OrderedDict({'epoch': trainer.epoch})
+
+        for domain in params.domains:
+
+            for data_set in ['valid', 'test']:
+
+                # machine translation task (evaluate perplexity and accuracy)
+                for lang1, lang2 in set(params.mt_steps + [(l2, l3) for _, l2, l3 in params.bt_steps]):
+                    eval_bleu = params.eval_bleu and params.is_master
+                    self.meta_evaluate_mt(scores, data_set, lang1, lang2, eval_bleu, domain)
+
+                with torch.no_grad():
+
+                    # causal prediction task (evaluate perplexity and accuracy)
+                    for lang1, lang2 in params.clm_steps:
+                        self.evaluate_clm(scores, data_set, lang1, lang2)
+
+                    # prediction task (evaluate perplexity and accuracy)
+                    for lang1, lang2 in params.mlm_steps:
+                        self.evaluate_mlm(scores, data_set, lang1, lang2)
+
+                    # machine translation task (evaluate perplexity and accuracy)
+                    for lang1, lang2 in set(params.mt_steps + [(l2, l3) for _, l2, l3 in params.bt_steps]):
+                        eval_bleu = params.eval_bleu and params.is_master
+                        self.evaluate_mt(scores, data_set, lang1, lang2, eval_bleu,domain)
+
+                    # report average metrics per language
+                    _clm_mono = [l1 for (l1, l2) in params.clm_steps if l2 is None]
+                    if len(_clm_mono) > 0:
+                        scores['%s_clm_ppl' % data_set + domain] = np.mean([scores['%s_%s_clm_ppl' % (data_set, lang)] for lang in _clm_mono])
+                        scores['%s_clm_acc' % data_set + domain] = np.mean([scores['%s_%s_clm_acc' % (data_set, lang)] for lang in _clm_mono])
+                    _mlm_mono = [l1 for (l1, l2) in params.mlm_steps if l2 is None]
+                    if len(_mlm_mono) > 0:
+                        scores['%s_mlm_ppl' % data_set + domain] = np.mean([scores['%s_%s_mlm_ppl' % (data_set, lang)] for lang in _mlm_mono])
+                        scores['%s_mlm_acc' % data_set + domain] = np.mean([scores['%s_%s_mlm_acc' % (data_set, lang)] for lang in _mlm_mono])
+
+        return scores
+
+    def meta_evaluate_mt(self, scores, data_set, lang1, lang2, eval_bleu,domain):
+        """
+        Evaluate perplexity and next word prediction accuracy.
+        """
+        params = self.params
+        assert data_set in ['valid', 'test']
+        assert lang1 in params.langs
+        assert lang2 in params.langs
+
+        self.encoder.train()
+        self.decoder.train()
+        encoder = self.encoder.module if params.multi_gpu else self.encoder
+        decoder = self.decoder.module if params.multi_gpu else self.decoder
+
+        params = params
+        lang1_id = params.lang2id[lang1]
+        lang2_id = params.lang2id[lang2]
+
+        n_words = 0
+        xe_loss = 0
+        n_valid = 0
+
+        # only save states / evaluate usage on the validation set
+        eval_memory = params.use_memory and data_set == 'valid' and self.params.is_master
+        HashingMemory.EVAL_MEMORY = eval_memory
+        if eval_memory:
+            all_mem_att = {k: [] for k, _ in self.memory_list}
+
+        # store hypothesis to compute BLEU score
+        if eval_bleu:
+            hypothesis = []
+
+        losses = []
+
+        for batch in self.get_iterator(data_set, lang1, lang2,domain):
+
+            # generate batch
+            (x1, len1), (x2, len2) = batch
+            langs1 = x1.clone().fill_(lang1_id)
+            langs2 = x2.clone().fill_(lang2_id)
+
+            # target words to predict
+            alen = torch.arange(len2.max(), dtype=torch.long, device=len2.device)
+            pred_mask = alen[:, None] < len2[None] - 1  # do not predict anything given the last target word
+            y = x2[1:].masked_select(pred_mask[:-1])
+            assert len(y) == (len2 - 1).sum().item()
+
+            # cuda
+            x1, len1, langs1, x2, len2, langs2, y = to_cuda(x1, len1, langs1, x2, len2, langs2, y)
+
+            # # encode source sentence
+            # if params.l0_weight != 0:
+            #     enc1, _reg_loss = self.encoder('fwd', x=x1, lengths=len1, langs=langs1, causal=False)
+            # else:
+            #     enc1 = self.encoder('fwd', x=x1, lengths=len1, langs=langs1, causal=False)
+            # enc1 = enc1.transpose(0, 1)
+            # enc1 = enc1.half() if params.fp16 else enc1
+            #
+            # if params.l0_weight != 0 and params.dec_self:
+            #     dec2, _reg_loss = self.decoder('fwd', x=x2, lengths=len2, langs=langs2, causal=True, src_enc=enc1,
+            #                                    src_len=len1)
+            # else:
+            #     dec2 = self.decoder('fwd', x=x2, lengths=len2, langs=langs2, causal=True, src_enc=enc1, src_len=len1)
+            #
+            # # loss
+            # word_scores, loss = decoder('predict', tensor=dec2, pred_mask=pred_mask, y=y, get_scores=True)
+
+            encoder_named_parameters = [(n, p) for n, p in self.encoder.named_parameters()]
+            decoder_named_parameters = [(n, p) for n, p in self.decoder.named_parameters()] + [
+                ('pred_layer.proj.weight', self.decoder.pred_layer.proj.weight)]  # bug fix
+            encoder_fast_params = construct_fast_params(encoder_named_parameters)
+            decoder_fast_params = construct_fast_params(decoder_named_parameters)
+            encoder_named_params = [n for n, p in encoder_named_parameters]
+            decoder_named_params = [n for n, p in decoder_named_parameters]
+
+            for i in range(self.inner_loop):
+
+                enc1 = encoder('fwd', x=x1, lengths=len1, langs=langs1, causal=False, params=encoder_fast_params)
+                enc1 = enc1.transpose(0, 1)
+                dec2 = decoder('fwd', x=x2, lengths=len2, langs=langs2, causal=True, src_enc=enc1, src_len=len1,
+                               params=decoder_fast_params)
+                _, loss = decoder('predict', tensor=dec2, pred_mask=pred_mask, y=y, get_scores=False,
+                                  params=decoder_fast_params['pred_layer']['proj'])
+
+                encoder_parameters = deconstruct_fast_params(encoder_fast_params, encoder_named_params)
+                decoder_parameters = deconstruct_fast_params(decoder_fast_params, decoder_named_params)
+
+                encoder_named_parameters = [(n, p) for n, p in zip(encoder_named_params, encoder_parameters)]
+                decoder_named_parameters = [(n, p) for n, p in zip(decoder_named_params, decoder_parameters)]
+
+                encoder_grads = grad(loss, encoder_parameters, allow_unused=True, retain_graph=True)
+                decoder_grads = grad(loss, decoder_parameters)
+
+                encoder_fast_params = new_fast_params(encoder_named_parameters, encoder_grads, self.update_rate)
+                decoder_fast_params = new_fast_params(decoder_named_parameters, decoder_grads, self.update_rate)
+
+                enc1 = encoder('fwd', x=x1, lengths=len1, langs=langs1, causal=False, params=encoder_fast_params)
+                enc1 = enc1.transpose(0, 1)
+                dec2 = decoder('fwd', x=x2, lengths=len2, langs=langs2, causal=True, src_enc=enc1, src_len=len1,
+                               params=decoder_fast_params)
+                _, loss = decoder('predict', tensor=dec2, pred_mask=pred_mask, y=y, get_scores=False,
+                                  params=decoder_fast_params['pred_layer']['proj'])
+                if i == self.inner_loop - 1:
+                    losses.append(loss)
+
+            self.meta_optim.zero_grad()
+            loss = sum(losses) / len(losses)
+            loss.backward()
+            self.meta_optim.step()

@@ -15,7 +15,7 @@ from src.utils import bool_flag, initialize_exp, set_sampling_probs, shuf_order
 from src.model import check_model_params, build_model
 from src.model.memory import HashingMemory
 from src.trainer import SingleTrainer, EncDecTrainer, MultiDomainTrainer
-from src.evaluation.evaluator import SingleEvaluator, EncDecEvaluator, MultiDomainEvaluator
+from src.evaluation.evaluator import SingleEvaluator, EncDecEvaluator, MultiDomainEvaluator, MetaMultiDomainEvaluator
 
 
 def get_parser():
@@ -230,6 +230,7 @@ def get_parser():
     parser.add_argument('--domain_ratio_update_freq',type=int,default=0)
     parser.add_argument('--domain_reset_freq', type=int, default=0)
     parser.add_argument('--sampling_uniform',type=bool_flag,default=False)
+    parser.add_argument('--meta_learning',type=bool_flag,default=False)
 
     return parser
 
@@ -260,7 +261,10 @@ def main(params):
         evaluator = SingleEvaluator(trainer, data, params)
     elif params.domains:
         trainer = MultiDomainTrainer(encoder, decoder, data, params)
-        evaluator = MultiDomainEvaluator(trainer, data, params)
+        if params.meta_learning:
+            evaluator = MetaMultiDomainEvaluator(trainer, data, params)
+        else:
+            evaluator = MultiDomainEvaluator(trainer, data, params)
     else:
         trainer = EncDecTrainer(encoder, decoder, data, params)
         evaluator = EncDecEvaluator(trainer, data, params)
