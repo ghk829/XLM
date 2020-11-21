@@ -1273,6 +1273,6 @@ class MetaMultiDomainEvaluator(MultiDomainEvaluator):
                     self.meta_optim.zero_grad()
                     meta_grads = grad(loss, chain(encoder.parameters(),decoder.parameters()),allow_unused=True)
                     for w, g in zip(chain(encoder.parameters(),decoder.parameters()), meta_grads):
-                        if g:
+                        if g is not None:
                             w.grad = g
                     self.meta_optim.step()
