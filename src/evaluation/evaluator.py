@@ -1254,16 +1254,18 @@ class MetaMultiDomainEvaluator(MultiDomainEvaluator):
                 encoder_named_parameters = [(n, p) for n, p in zip(encoder_named_params, encoder_parameters)]
                 decoder_named_parameters = [(n, p) for n, p in zip(decoder_named_params, decoder_parameters)]
 
-                encoder_fast_params = new_fast_params(encoder_named_parameters, encoder_grads, self.update_rate)
-                decoder_fast_params = new_fast_params(decoder_named_parameters, decoder_grads, self.update_rate)
+                new_named_parameters = new_fast_params(encoder_named_parameters, encoder_grads, self.update_rate)
+                encoder_fast_params = construct_fast_params(new_named_parameters)
+                new_named_parameters = new_fast_params(decoder_named_parameters, decoder_grads, self.update_rate)
+                decoder_fast_params = construct_fast_params(new_named_parameters)
 
-                enc1 = encoder('fwd', x=x1, lengths=len1, langs=langs1, causal=False, params=encoder_fast_params)
-                enc1 = enc1.transpose(0, 1)
-                dec2 = decoder('fwd', x=x2, lengths=len2, langs=langs2, causal=True, src_enc=enc1, src_len=len1,
-                               params=decoder_fast_params)
-                _, loss = decoder('predict', tensor=dec2, pred_mask=pred_mask, y=y, get_scores=False,
-                                  params=decoder_fast_params['pred_layer']['proj'])
                 if i == self.inner_loop - 1:
+                    enc1 = encoder('fwd', x=x1, lengths=len1, langs=langs1, causal=False, params=encoder_fast_params)
+                    enc1 = enc1.transpose(0, 1)
+                    dec2 = decoder('fwd', x=x2, lengths=len2, langs=langs2, causal=True, src_enc=enc1, src_len=len1,
+                                   params=decoder_fast_params)
+                    _, loss = decoder('predict', tensor=dec2, pred_mask=pred_mask, y=y, get_scores=False,
+                                      params=decoder_fast_params['pred_layer']['proj'])
                     self.meta_optim.zero_grad()
                     loss.backward()
                     self.meta_optim.step()
