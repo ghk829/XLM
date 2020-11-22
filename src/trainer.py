@@ -1125,7 +1125,7 @@ class MultiDomainTrainer(Trainer):
         iterator = self.data['para'][(_lang1, _lang2,domain)][data_set].get_iterator(
             shuffle=True,
             group_by_size=True,
-            n_sentences=n_samples
+            n_sentences=n_samples,
         )
 
         for batch in iterator:
