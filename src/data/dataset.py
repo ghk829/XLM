@@ -552,7 +552,7 @@ class DomainParallelDataset(Dataset):
 
         # create batches - either have a fixed number of sentences, or a similar number of tokens
         if self.tokens_per_batch == -1:
-            batches = np.array_split(indices, math.ceil(len(indices) * 1. / (self.batch_size//2) ))
+            batches = np.array_split(indices, math.ceil(len(indices) * 1. / (self.batch_size//4) ))
         else:
             batch_ids = np.cumsum(lengths[indices]) // self.tokens_per_batch
             _, bounds = np.unique(batch_ids, return_index=True)
