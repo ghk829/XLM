@@ -230,7 +230,7 @@ def get_parser():
     parser.add_argument('--domain_ratio_update_freq',type=int,default=0)
     parser.add_argument('--domain_reset_freq', type=int, default=0)
     parser.add_argument('--sampling_uniform',type=bool_flag,default=False)
-    parser.add_argument('--meta_learning',type=bool_flag,default=False)
+    parser.add_argument('--local_adapt',type=bool_flag,default=False)
 
     return parser
 
@@ -261,7 +261,7 @@ def main(params):
         evaluator = SingleEvaluator(trainer, data, params)
     elif params.domains:
         trainer = MultiDomainTrainer(encoder, decoder, data, params)
-        if params.meta_learning:
+        if params.local_adapt:
             evaluator = MetaMultiDomainEvaluator(trainer, data, params)
         else:
             evaluator = MultiDomainEvaluator(trainer, data, params)

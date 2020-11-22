@@ -1106,7 +1106,7 @@ class MetaMultiDomainEvaluator(MultiDomainEvaluator):
         super().__init__(trainer, data, params)
 
         self.update_rate = 0.001
-        self.inner_loop = 2
+        self.inner_loop = 1
 
 
 

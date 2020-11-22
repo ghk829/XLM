@@ -140,7 +140,7 @@ def build_model(params, dico):
 
     else:
 
-        if params.meta_learning:
+        if params.local_adapt:
             from .transformer import MetaTransformerModel
             # build
             encoder = MetaTransformerModel(params, dico, is_encoder=True,
