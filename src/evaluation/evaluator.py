@@ -1106,7 +1106,7 @@ class MetaMultiDomainEvaluator(MultiDomainEvaluator):
         super().__init__(trainer, data, params)
 
         self.update_rate = 0.001
-        self.inner_loop = 1
+        self.inner_loop = 2
 
 
 
@@ -1211,22 +1211,10 @@ class MetaMultiDomainEvaluator(MultiDomainEvaluator):
             # cuda
             x1, len1, langs1, x2, len2, langs2, y = to_cuda(x1, len1, langs1, x2, len2, langs2, y)
 
-            # # encode source sentence
-            # if params.l0_weight != 0:
-            #     enc1, _reg_loss = self.encoder('fwd', x=x1, lengths=len1, langs=langs1, causal=False)
-            # else:
-            #     enc1 = self.encoder('fwd', x=x1, lengths=len1, langs=langs1, causal=False)
-            # enc1 = enc1.transpose(0, 1)
-            # enc1 = enc1.half() if params.fp16 else enc1
-            #
-            # if params.l0_weight != 0 and params.dec_self:
-            #     dec2, _reg_loss = self.decoder('fwd', x=x2, lengths=len2, langs=langs2, causal=True, src_enc=enc1,
-            #                                    src_len=len1)
-            # else:
-            #     dec2 = self.decoder('fwd', x=x2, lengths=len2, langs=langs2, causal=True, src_enc=enc1, src_len=len1)
-            #
-            # # loss
-            # word_scores, loss = decoder('predict', tensor=dec2, pred_mask=pred_mask, y=y, get_scores=True)
+            def get_grad(g):
+                if g is None:
+                    return 0
+                return g
 
             encoder_named_parameters = [(n, p) for n, p in encoder.named_parameters()]
             decoder_named_parameters = [(n, p) for n, p in decoder.named_parameters()] + [
@@ -1254,14 +1242,15 @@ class MetaMultiDomainEvaluator(MultiDomainEvaluator):
                 encoder_named_parameters = [(n, p) for n, p in zip(encoder_named_params, encoder_parameters)]
                 decoder_named_parameters = [(n, p) for n, p in zip(decoder_named_params, decoder_parameters)]
 
-                encoder_named_parameters = new_fast_params(encoder_named_parameters, encoder_grads, self.update_rate)
+                #encoder_named_parameters = new_fast_params(encoder_named_parameters, encoder_grads, self.update_rate)
+                encoder_named_parameters = [(n, p - self.update_rate * get_grad(g)) for (n, p), g in zip(encoder_named_parameters, encoder_grads)]
                 encoder_fast_params = construct_fast_params(encoder_named_parameters)
-                decoder_named_parameters = new_fast_params(decoder_named_parameters, decoder_grads, self.update_rate)
+                #decoder_named_parameters = new_fast_params(decoder_named_parameters, decoder_grads, self.update_rate)
+                decoder_named_parameters = [(n, p - self.update_rate * get_grad(g)) for (n, p), g in zip(decoder_named_parameters, decoder_grads)]
                 decoder_fast_params = construct_fast_params(decoder_named_parameters)
 
                 if i == self.inner_loop - 1:
-
-                    from itertools import chain
+                    torch.cuda.empty_cache()
 
                     enc1 = encoder('fwd', x=x1, lengths=len1, langs=langs1, causal=False, params=encoder_fast_params)
                     enc1 = enc1.transpose(0, 1)
