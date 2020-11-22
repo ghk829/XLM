@@ -1119,7 +1119,7 @@ class MetaMultiDomainEvaluator(MultiDomainEvaluator):
 
         for domain in params.domains:
 
-            for data_set in ['valid', 'test']:
+            for data_set in ['valid']:
 
                 # machine translation task (evaluate perplexity and accuracy)
                 for lang1, lang2 in set(params.mt_steps + [(l2, l3) for _, l2, l3 in params.bt_steps]):
