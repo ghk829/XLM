@@ -1119,12 +1119,12 @@ class MetaMultiDomainEvaluator(MultiDomainEvaluator):
 
         for domain in params.domains:
 
-            for data_set in ['valid']:
-
-                # machine translation task (evaluate perplexity and accuracy)
-                for lang1, lang2 in set(params.mt_steps + [(l2, l3) for _, l2, l3 in params.bt_steps]):
-                    eval_bleu = params.eval_bleu and params.is_master
-                    self.meta_evaluate_mt(scores, data_set, lang1, lang2, eval_bleu, domain)
+            for data_set in ['valid', 'test']:
+                if data_set == 'valid':
+                    # machine translation task (evaluate perplexity and accuracy)
+                    for lang1, lang2 in set(params.mt_steps + [(l2, l3) for _, l2, l3 in params.bt_steps]):
+                        eval_bleu = params.eval_bleu and params.is_master
+                        self.meta_evaluate_mt(scores, data_set, lang1, lang2, eval_bleu, domain)
 
                 with torch.no_grad():
 
