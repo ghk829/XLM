@@ -14,7 +14,7 @@ from src.data.loader import check_data_params, load_data
 from src.utils import bool_flag, initialize_exp, set_sampling_probs, shuf_order
 from src.model import check_model_params, build_model
 from src.model.memory import HashingMemory
-from src.trainer import SingleTrainer, EncDecTrainer, MultiDomainTrainer
+from src.trainer import SingleTrainer, EncDecTrainer, MultiDomainTrainer, CurriculumTrainer
 from src.evaluation.evaluator import SingleEvaluator, EncDecEvaluator, MultiDomainEvaluator, MetaMultiDomainEvaluator
 
 
@@ -232,6 +232,10 @@ def get_parser():
     parser.add_argument('--sampling_uniform',type=bool_flag,default=False)
     parser.add_argument('--local_adapt',type=bool_flag,default=False)
 
+
+    # curriculum learning
+    parser.add_argument('--curriculum_learning',type=bool_flag,default=False)
+
     return parser
 
 
@@ -260,7 +264,10 @@ def main(params):
         trainer = SingleTrainer(model, data, params)
         evaluator = SingleEvaluator(trainer, data, params)
     elif params.domains:
-        trainer = MultiDomainTrainer(encoder, decoder, data, params)
+        if params.curriculum_learning:
+            trainer = CurriculumTrainer(encoder,decoder,data,params)
+        else:
+            trainer = MultiDomainTrainer(encoder, decoder, data, params)
         if params.local_adapt:
             evaluator = MetaMultiDomainEvaluator(trainer, data, params)
         else:

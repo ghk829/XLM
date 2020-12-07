@@ -576,3 +576,54 @@ class DomainParallelDataset(Dataset):
 
         # return the iterator
         return self.get_batches_iterator(batches, return_indices)
+
+
+class CurriculumDataset(ParallelDataset):
+
+    def __init__(self, *args):
+        super().__init__(*args)
+
+        self.curriculum = []
+
+    def get_iterator(self, shuffle, group_by_size=False, n_sentences=-1, return_indices=False):
+        """
+        Return a sentences iterator.
+        """
+        n_sentences = len(self.pos1) if n_sentences == -1 else n_sentences
+        assert 0 < n_sentences <= len(self.pos1)
+        assert type(shuffle) is bool and type(group_by_size) is bool
+
+        # sentence lengths
+        lengths = self.lengths1 + self.lengths2 + 4
+
+        # select sentences to iterate over
+        if shuffle:
+            indices = np.random.permutation(len(self.pos1))[:n_sentences]
+        else:
+            indices = np.arange(n_sentences)
+
+        # group sentences by lengths
+        if group_by_size:
+            indices = indices[np.argsort(lengths[indices], kind='mergesort')]
+
+        # create batches - either have a fixed number of sentences, or a similar number of tokens
+        if self.tokens_per_batch == -1:
+            batches = np.array_split(indices, math.ceil(len(indices) * 1. / self.batch_size))
+        else:
+            batch_ids = np.cumsum(lengths[indices]) // self.tokens_per_batch
+            _, bounds = np.unique(batch_ids, return_index=True)
+            batches = [indices[bounds[i]:bounds[i + 1]] for i in range(len(bounds) - 1)]
+            if bounds[-1] < len(indices):
+                batches.append(indices[bounds[-1]:])
+
+        # optionally shuffle batches
+        if shuffle:
+            np.random.shuffle(batches)
+
+        # sanity checks
+        assert n_sentences == sum([len(x) for x in batches])
+        assert lengths[indices].sum() == sum([lengths[x].sum() for x in batches])
+        # assert set.union(*[set(x.tolist()) for x in batches]) == set(range(n_sentences))  # slow
+
+        # return the iterator
+        return batches

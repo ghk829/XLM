@@ -10,7 +10,7 @@ import os
 import numpy as np
 import torch
 
-from .dataset import StreamDataset, Dataset, ParallelDataset, DomainParallelDataset
+from .dataset import StreamDataset, Dataset, ParallelDataset, DomainParallelDataset, CurriculumDataset
 from .dictionary import BOS_WORD, EOS_WORD, PAD_WORD, UNK_WORD, MASK_WORD
 
 logger = getLogger()
@@ -224,6 +224,73 @@ def load_para_data(params, data):
 
     logger.info("")
 
+def load_cur_para_data(params,data):
+    """
+        Load parallel data.
+        """
+    data['para'] = {}
+
+    required_para_train = set(params.clm_steps + params.mlm_steps + params.pc_steps + params.mt_steps)
+
+    for src, tgt in params.para_dataset.keys():
+
+        logger.info('============ Parallel data (%s-%s)' % (src, tgt))
+
+        assert (src, tgt) not in data['para']
+        data['para'][(src, tgt)] = {}
+
+        for splt in ['train', 'valid', 'test']:
+
+            # no need to load training data for evaluation
+            if splt == 'train' and params.eval_only:
+                continue
+
+            # for back-translation, we can't load training data
+            if splt == 'train' and (src, tgt) not in required_para_train and (tgt, src) not in required_para_train:
+                continue
+
+            # load binarized datasets
+            src_path, tgt_path = params.para_dataset[(src, tgt)][splt]
+            src_data = load_binarized(src_path, params)
+            tgt_data = load_binarized(tgt_path, params)
+
+            # update dictionary parameters
+            set_dico_parameters(params, data, src_data['dico'])
+            set_dico_parameters(params, data, tgt_data['dico'])
+
+            # create ParallelDataset
+            if splt == 'train':
+                dataset = CurriculumDataset(
+                    src_data['sentences'], src_data['positions'],
+                    tgt_data['sentences'], tgt_data['positions'],
+                    params
+                )
+            else:
+                dataset = ParallelDataset(
+                    src_data['sentences'], src_data['positions'],
+                    tgt_data['sentences'], tgt_data['positions'],
+                    params
+                )
+
+            # remove empty and too long sentences
+            if splt == 'train':
+                dataset.remove_empty_sentences()
+                dataset.remove_long_sentences(params.max_len)
+
+            # for validation and test set, enumerate sentence per sentence
+            if splt != 'train':
+                dataset.tokens_per_batch = -1
+
+            # if there are several processes on the same machine, we can split the dataset
+            if splt == 'train' and params.n_gpu_per_node > 1 and params.split_data:
+                n_sent = len(dataset) // params.n_gpu_per_node
+                a = n_sent * params.local_rank
+                b = n_sent * params.local_rank + n_sent
+                dataset.select_data(a, b)
+
+            data['para'][(src, tgt)][splt] = dataset
+            logger.info("")
+
 
 def load_para_data_with_domain(params, data, prior_ratios):
     """
@@ -382,19 +449,20 @@ def check_data_params(params):
 
     if params.domains:
         params.domains = params.domains.split(',')
-        params.para_dataset = {
-            (src, tgt, domain): {
-                splt: (os.path.join(params.data_path, domain ,'%s.%s-%s.%s.pth' % (splt, src, tgt, src)),
-                       os.path.join(params.data_path, domain ,'%s.%s-%s.%s.pth' % (splt, src, tgt, tgt)))
-                for splt in para_set
-                if splt != 'train' or (src, tgt) in required_para_train or (tgt, src) in required_para_train
-            } for src in params.langs for tgt in params.langs
-            if src < tgt and ((src, tgt) in required_para or (tgt, src) in required_para)
-            for domain in params.domains
-        }
-        # @TODO : params.prior_ratio 구현
-        # 데이터셋을 읽어들여 데이터셋 사이즈로 조정한다.
-        params.prior_ratios = [1/len(params.domains) for _ in params.domains ]
+        if not params.curriculum_learning:
+            params.para_dataset = {
+                (src, tgt, domain): {
+                    splt: (os.path.join(params.data_path, domain ,'%s.%s-%s.%s.pth' % (splt, src, tgt, src)),
+                           os.path.join(params.data_path, domain ,'%s.%s-%s.%s.pth' % (splt, src, tgt, tgt)))
+                    for splt in para_set
+                    if splt != 'train' or (src, tgt) in required_para_train or (tgt, src) in required_para_train
+                } for src in params.langs for tgt in params.langs
+                if src < tgt and ((src, tgt) in required_para or (tgt, src) in required_para)
+                for domain in params.domains
+            }
+            # @TODO : params.prior_ratio 구현
+            # 데이터셋을 읽어들여 데이터셋 사이즈로 조정한다.
+            params.prior_ratios = [1/len(params.domains) for _ in params.domains ]
 
 
 
@@ -429,11 +497,13 @@ def load_data(params):
     # parallel datasets
     if params.domains:
 
-        prior_ratios = params.prior_ratios
-        # prior_ratios = [ 1 for _ in range(len(params.domains))]
-        # prior_ratios = [ ratio/sum(prior_ratios) for ratio in prior_ratios]
-        load_para_data_with_domain(params,data, prior_ratios)
+        if params.curriculum_learning:
+            load_cur_para_data(params,data)
+        else:
+            prior_ratios = params.prior_ratios
+            load_para_data_with_domain(params,data, prior_ratios)
     else:
+
         load_para_data(params, data)
 
     # monolingual data summary
@@ -444,7 +514,7 @@ def load_data(params):
                 '{: <18} - {: >5} - {: >12}:{: >10}'.format('Monolingual data', data_set, lang, len(v[data_set])))
 
     # parallel data summary
-    if params.domains:
+    if params.domains and not params.curriculum_learning:
         for (src, tgt, domain), v in data['para'].items():
             for data_set in v.keys():
                 logger.info('{: <18} - {: >5} - {: >12}:{: >10}'.format('Parallel data', data_set, '%s-%s-%s' % (src, tgt,domain),
