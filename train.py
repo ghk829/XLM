@@ -271,7 +271,10 @@ def main(params):
         if params.local_adapt:
             evaluator = MetaMultiDomainEvaluator(trainer, data, params)
         else:
-            evaluator = MultiDomainEvaluator(trainer, data, params)
+            if params.curriculum_learning:
+                evaluator = EncDecEvaluator(trainer, data, params)
+            else:
+                evaluator = MultiDomainEvaluator(trainer, data, params)
     else:
         trainer = EncDecTrainer(encoder, decoder, data, params)
         evaluator = EncDecEvaluator(trainer, data, params)
