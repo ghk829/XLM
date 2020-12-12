@@ -25,7 +25,7 @@ from .utils import parse_lambda_config, update_lambdas
 from .model.memory import HashingMemory
 from .model.transformer import TransformerFFN
 from .model.data_actor import BaseActor
-from .model.curriculum import CurriculumConstructor
+from .model.curriculum import CurriculumConstructor, FeatureWeight
 logger = getLogger()
 
 
@@ -1249,6 +1249,7 @@ class CurriculumTrainer(Trainer):
         self.params = params
         self.domains = params.domains
 
+        self.feature_weights = FeatureWeight(1)
         self.curriculum = CurriculumConstructor(5)
         self.curriculum_exludes = set()
 
@@ -1413,17 +1414,25 @@ class CurriculumTrainer(Trainer):
 
         return qzs
 
+    def get_features(self,batches,dataset):
+
+        print('start nmt feature')
+        s = time.time()
+        nmt_features = self.multiple_domain_feature(batches, dataset)
+        print(time.time() - s)
+        # multi features & batch
+        features = self.feature_weights(nmt_features)
+        # aggregate
+        return features
+
     def order_curriculum(self, batches, dataset):
-        s =time.time()
+
         bts = np.concatenate(batches,axis=0)
         bts = np.array([ bt for bt in bts if bt not in self.curriculum_exludes ])
 
-        print('start nmt feature')
-        nmt_features = self.multiple_domain_feature(batches, dataset)
-        print(time.time() - s)
-
         # sort by feature
-        order = nmt_features.argsort()[::-1]
+        features = self.get_features(batches,dataset)
+        order = features.argsort()[::-1]
         bts = np.array([bts[o] for o in order])
 
         # set curriculum
