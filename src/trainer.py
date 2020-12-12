@@ -25,7 +25,7 @@ from .utils import parse_lambda_config, update_lambdas
 from .model.memory import HashingMemory
 from .model.transformer import TransformerFFN
 from .model.data_actor import BaseActor
-
+from .model.curriculum import CurriculumConstructor
 logger = getLogger()
 
 
@@ -1249,6 +1249,9 @@ class CurriculumTrainer(Trainer):
         self.params = params
         self.domains = params.domains
 
+        self.curriculum = CurriculumConstructor(5)
+        self.curriculum_exludes = set()
+
         super().__init__(data, params)
 
     def mt_step(self, lang1, lang2, lambda_coeff):
@@ -1412,12 +1415,22 @@ class CurriculumTrainer(Trainer):
 
     def order_curriculum(self, batches, dataset):
         s =time.time()
+        bts = np.concatenate(batches,axis=0)
+        bts = np.array([ bt for bt in bts if bt not in self.curriculum_exludes ])
+
         print('start nmt feature')
         nmt_features = self.multiple_domain_feature(batches, dataset)
-        print(time.time()-s)
-        nmt_features
+        print(time.time() - s)
 
+        # sort by feature
+        order = nmt_features.argsort()[::-1]
+        bts = np.array([bts[o] for o in order])
 
+        # set curriculum
+        curriculum_sample = self.curriculum.next(len(bts))
+        self.curriculum_exludes.update(set(bts[curriculum_sample ==0]))
+        bts = bts[curriculum_sample != 0]
+        batches = np.array_split(bts, math.ceil(bts.shape[0] / dataset.batch_size))
 
         return batches
 
