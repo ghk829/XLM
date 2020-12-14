@@ -235,7 +235,7 @@ def get_parser():
 
     # curriculum learning
     parser.add_argument('--curriculum_learning',type=bool_flag,default=False)
-    parser.add_argument('--multiple_domain_feature',type=str,default='')
+    parser.add_argument('--multiple_domain_features',type=str,default='')
 
     # build features
     parser.add_argument('--build_multi_domain_features',type=str,default='')

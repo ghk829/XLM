@@ -68,6 +68,5 @@ def build_multiple_domain_feature(data, params, batches, dataset):
 
             qz = torch.Tensor([ ((f-b).sum() / l).cpu() for f,b,l  in zip(domain_finetuned,domain_based,length_y) ])
             qzs = torch.cat((qzs,qz))
-            return qzs
 
     return qzs
