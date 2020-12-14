@@ -1249,7 +1249,7 @@ class CurriculumTrainer(Trainer):
         self.params = params
         self.domains = params.domains
 
-        self.feature_weights = FeatureWeight(1)
+        self.feature_weights = FeatureWeight(2)
         self.curriculum = CurriculumConstructor(5)
         self.curriculum_exludes = set()
 
@@ -1365,7 +1365,7 @@ class CurriculumTrainer(Trainer):
         decoder.eval()
         self.encoder.eval()
         self.decoder.eval()
-        qzs = np.array([])
+        qzs = torch.Tensor([])
         for lang1, lang2 in set(params.mt_steps + [(l2, l3) for _, l2, l3 in params.bt_steps]):
 
             lang1_id = params.lang2id[lang1]
@@ -1409,20 +1409,39 @@ class CurriculumTrainer(Trainer):
                 scores = torch.Tensor([torch.index_select(score, 0, ref) for score, ref in zip(F.log_softmax(word_scores, dim=-1), y)]).to(len2.device)
                 domain_based = torch.split(scores, length_y)
 
-                qz = [ ((f-b).sum() / l).cpu() for f,b,l  in zip(domain_finetuned,domain_based,length_y) ]
-                qzs = np.concatenate((qzs,qz))
+                qz = torch.Tensor([ ((f-b).sum() / l).cpu() for f,b,l  in zip(domain_finetuned,domain_based,length_y) ])
+                qzs = torch.cat((qzs,qz))
 
         return qzs
 
-    def get_features(self,batches,dataset):
+    def multiple_domain_feature(self,batches,dataset):
+        return torch.Tensor(np.concatenate(batches))
 
-        print('start nmt feature')
-        s = time.time()
-        nmt_features = self.multiple_domain_feature(batches, dataset)
-        print(time.time() - s)
+    def get_features(self,batches,dataset):
+        num_features = 0
+        features = []
+
+        if True:
+            print('start nmt feature')
+            s = time.time()
+            nmt_features = self.multiple_domain_feature(batches, dataset)
+            print(time.time() - s)
+            features.append(nmt_features)
+            num_features +=1
+
+        if True:
+            print('start nlm feature')
+            s = time.time()
+            nlm_features = self.multiple_domain_feature(batches, dataset)
+            features.append(nlm_features)
+            print(time.time() - s)
+            num_features +=1
+
         # multi features & batch
-        features = self.feature_weights(nmt_features)
+        multi_features = torch.cat(features).reshape(num_features,-1).transpose(1,0)
+        features = self.feature_weights(multi_features)
         # aggregate
+        features = features.sum(dim=-1)
         return features
 
     def order_curriculum(self, batches, dataset):
@@ -1432,8 +1451,9 @@ class CurriculumTrainer(Trainer):
 
         # sort by feature
         features = self.get_features(batches,dataset)
+        features = features.detach().numpy()
         order = features.argsort()[::-1]
-        bts = np.array([bts[o] for o in order])
+        bts = bts[order]
 
         # set curriculum
         curriculum_sample = self.curriculum.next(len(bts))
@@ -1442,4 +1462,3 @@ class CurriculumTrainer(Trainer):
         batches = np.array_split(bts, math.ceil(bts.shape[0] / dataset.batch_size))
 
         return batches
-

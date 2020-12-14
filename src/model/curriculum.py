@@ -11,7 +11,7 @@ class FeatureWeight(nn.Module):
         self.feature_weights = torch.nn.Parameter(torch.zeros(number_of_features))
 
     def forward(self, feature):
-        out = self.feature_weights * feature  # col x col
+        out = nn.functional.softmax(self.feature_weights,dim=-1) * feature  # col x col
         return out
 
 
