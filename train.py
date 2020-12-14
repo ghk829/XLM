@@ -235,6 +235,11 @@ def get_parser():
 
     # curriculum learning
     parser.add_argument('--curriculum_learning',type=bool_flag,default=False)
+    parser.add_argument('--multiple_domain_feature',type=str,default='')
+
+    # build features
+    parser.add_argument('--build_multi_domain_features',type=str,default='')
+
 
     return parser
 
@@ -252,6 +257,21 @@ def main(params):
 
     # load data
     data = load_data(params)
+
+    if params.build_multi_domain_features:
+        import torch
+        from src.curriculum import build_multiple_domain_feature
+        dataset = data['para'][('de', 'en')]['train']
+        batches, indices = dataset.get_iterator(
+            shuffle=False,
+            group_by_size=params.group_by_size,
+            n_sentences=-1,
+        )
+
+        features = build_multiple_domain_feature(data, params, batches, dataset)
+        result = {'indices':indices,'multi_domain_features':features}
+        torch.save(result,params.build_multi_domain_features)
+        return
 
     # build model
     if params.encoder_only:

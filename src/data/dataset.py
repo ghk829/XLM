@@ -626,4 +626,4 @@ class CurriculumDataset(ParallelDataset):
         # assert set.union(*[set(x.tolist()) for x in batches]) == set(range(n_sentences))  # slow
 
         # return the iterator
-        return batches
+        return batches, indices
