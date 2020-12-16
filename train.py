@@ -240,7 +240,7 @@ def get_parser():
     # build features
     parser.add_argument('--build_multi_domain_features',type=str,default='')
 
-
+    parser.add_argument('--lstm',type=bool_flag,default=False)
     return parser
 
 

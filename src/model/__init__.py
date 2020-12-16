@@ -108,8 +108,14 @@ def build_model(params, dico):
     """
     is_adapt = params.is_adapt
     if params.encoder_only:
-        # build
-        model = TransformerModel(params, dico, is_encoder=True, with_output=True)
+
+        if params.lstm:
+            from src.model.lstm import LSTMModel
+            model = LSTMModel(len(dico.counts), params.emb_dim, len(dico.counts), dropout_p=params.dropout, n_layers=params.n_layers, max_length=512)
+        else:
+
+            # build
+            model = TransformerModel(params, dico, is_encoder=True, with_output=True)
 
         # reload pretrained word embeddings
         if params.reload_emb != '':
