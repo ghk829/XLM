@@ -240,6 +240,7 @@ def get_parser():
     # build features
     parser.add_argument('--build_nmt_domain_feature',type=str,default='')
     parser.add_argument('--build_nmt_base_feature', type=str, default='')
+    parser.add_argument('--build_output_path', type=str, default='')
     parser.add_argument('--build_single_domain_nlm_feature',type=str,default='')
 
     parser.add_argument('--lstm',type=bool_flag,default=False)
@@ -272,7 +273,7 @@ def main(params):
 
         features = build_nmt_domain_feature(data, params, batches, dataset)
         result = {'indices':indices,'domain_feature':features}
-        torch.save(result,params.build_nmt_domain_feature)
+        torch.save(result,params.build_output_path)
         return
 
     # build model
