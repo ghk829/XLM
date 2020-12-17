@@ -31,11 +31,11 @@ def build_nmt_domain_feature(data, params, batches, dataset):
 
         lang1_id = params.lang2id[lang1]
         lang2_id = params.lang2id[lang2]
-        logger.debug(len(batches))
+        logger.info(len(batches))
         i = 0
         for sentence_ids in batches:
             i += 1
-            logger.debug(i)
+            logger.info(i)
             pos1 = dataset.pos1[sentence_ids]
             pos2 = dataset.pos2[sentence_ids]
             sent1 = dataset.batch_sentences([dataset.sent1[a:b] for a, b in pos1])
