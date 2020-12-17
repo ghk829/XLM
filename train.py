@@ -235,10 +235,12 @@ def get_parser():
 
     # curriculum learning
     parser.add_argument('--curriculum_learning',type=bool_flag,default=False)
-    parser.add_argument('--multiple_domain_features',type=str,default='')
+    parser.add_argument('--multiple_nmt_domain_feature',type=str,default='')
 
     # build features
-    parser.add_argument('--build_multi_domain_features',type=str,default='')
+    parser.add_argument('--build_nmt_domain_feature',type=str,default='')
+    parser.add_argument('--build_nmt_base_feature', type=str, default='')
+    parser.add_argument('--build_single_domain_nlm_feature',type=str,default='')
 
     parser.add_argument('--lstm',type=bool_flag,default=False)
     return parser
@@ -258,9 +260,9 @@ def main(params):
     # load data
     data = load_data(params)
 
-    if params.build_multi_domain_features:
+    if params.build_nmt_domain_feature:
         import torch
-        from src.curriculum import build_multiple_domain_feature
+        from src.curriculum import build_nmt_domain_feature
         dataset = data['para'][('de', 'en')]['train']
         batches, indices = dataset.get_iterator(
             shuffle=False,
@@ -268,9 +270,9 @@ def main(params):
             n_sentences=-1,
         )
 
-        features = build_multiple_domain_feature(data, params, batches, dataset)
-        result = {'indices':indices,'multi_domain_features':features}
-        torch.save(result,params.build_multi_domain_features)
+        features = build_nmt_domain_feature(data, params, batches, dataset)
+        result = {'indices':indices,'domain_feature':features}
+        torch.save(result,params.build_nmt_domain_feature)
         return
 
     # build model

@@ -1345,28 +1345,45 @@ class CurriculumTrainer(Trainer):
         self.iterators[(iter_name, lang1, lang2)] = iterator
         return iterator
 
-    def multiple_domain_feature(self,batches,dataset):
-        return torch.load(self.params.multiple_domain_feature)['multi_domain_features']
+    def multiple_nmt_domain_feature(self,batches,dataset):
+        return torch.load(self.params.multiple_nmt_domain_feature)['multi_domain_features']
+
+    def single_nmt_domain_feature(self,domain_feature):
+        return torch.load(domain_feature)['domain_feature']
+
+    def single_nlm_domain_feature(self,domain_feature):
+        return torch.load(domain_feature)['domain_feature']
 
     def get_features(self,batches,dataset):
         num_features = 0
         features = []
 
-        if self.params.multiple_domain_feature:
+        if self.params.multiple_nmt_domain_feature:
             print('start nmt feature')
             s = time.time()
-            nmt_features = self.multiple_domain_feature(batches, dataset)
+            nmt_features = self.multiple_nmt_domain_feature(batches, dataset)
             print(time.time() - s)
             features.append(nmt_features)
             num_features +=1
 
-        if True:
-            print('start nlm feature')
-            s = time.time()
-            nlm_features = self.multiple_domain_feature(batches, dataset)
-            features.append(nlm_features)
-            print(time.time() - s)
-            num_features +=1
+        elif self.params.finetune_nmt_domain_features:
+
+            for domain_feature in self.params.finetune_nmt_domain_features.split(','):
+                print('start nmt feature')
+                s = time.time()
+                nmt_features = self.single_nmt_domain_feature(domain_feature)
+                print(time.time() - s)
+                features.append(nmt_features)
+                num_features += 1
+
+        if self.params.finetune_nlm_domain_features:
+            for domain_feature in self.params.finetune_nlm_domain_features.split(','):
+                print('start nlm feature')
+                s = time.time()
+                nmt_features = self.single_nlm_domain_feature(domain_feature)
+                print(time.time() - s)
+                features.append(nmt_features)
+                num_features += 1
 
         # multi features & batch
         multi_features = torch.cat(features).reshape(num_features,-1).transpose(1,0)

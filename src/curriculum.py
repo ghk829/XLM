@@ -10,17 +10,17 @@ def nograd(func):
     return wrapper
 
 @nograd
-def build_multiple_domain_feature(data, params, batches, dataset):
+def build_nmt_domain_feature(data, params, batches, dataset):
     from src.model import build_model
     import copy
     from tqdm import tqdm
 
     params = copy.copy(params)
-    params.reload_model = 'multi-domain.pth,multi-domain.pth'
+    params.reload_model = params.build_nmt_domain_feature # 'multi-domain.pth,multi-domain.pth'
     encoder, decoder = build_model(params, data['dico'])
     encoder.eval()
     decoder.eval()
-    params.reload_model = 'best-test_de-en_mt_bleu.pth,best-test_de-en_mt_bleu.pth'
+    params.reload_model = params.build_nmt_base_feature # 'best-test_de-en_mt_bleu.pth,best-test_de-en_mt_bleu.pth'
     base_encoder, base_decoder = build_model(params, data['dico'])
     qzs = torch.Tensor([])
     for lang1, lang2 in set(params.mt_steps + [(l2, l3) for _, l2, l3 in params.bt_steps]):
