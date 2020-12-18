@@ -62,8 +62,16 @@ class Trainer(object):
         if params.multi_gpu and params.amp == -1:
             logger.info("Using nn.parallel.DistributedDataParallel ...")
             for name in self.MODEL_NAMES:
-                setattr(self, name, nn.parallel.DistributedDataParallel(getattr(self, name), device_ids=[params.local_rank], output_device=params.local_rank, broadcast_buffers=True, find_unused_parameters=True))
-
+                import inspect
+                if 'find_unused_parameters' in inspect.getargspec(nn.parallel.DistributedDataParallel):
+                    setattr(self, name,
+                            nn.parallel.DistributedDataParallel(getattr(self, name), device_ids=[params.local_rank],
+                                                                output_device=params.local_rank, broadcast_buffers=True,
+                                                                find_unused_parameters=True))
+                else:
+                    setattr(self, name,
+                            nn.parallel.DistributedDataParallel(getattr(self, name), device_ids=[params.local_rank],
+                                                                output_device=params.local_rank, broadcast_buffers=True))
         # set optimizers
         self.set_optimizers()
 
