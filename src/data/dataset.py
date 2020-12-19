@@ -627,3 +627,16 @@ class CurriculumDataset(ParallelDataset):
 
         # return the iterator
         return batches, indices
+
+class CurriculumStreamDataset(StreamDataset):
+
+    def __init__(self, sent, pos, bs, params):
+
+        super(CurriculumStreamDataset, self).__init__(sent, pos, bs, params)
+
+    def get_iterator(self, shuffle, subsample=1):
+        """
+        Return a sentences iterator.
+        """
+        indexes = (np.random.permutation if shuffle else range)(self.n_batches // subsample)
+        return indexes

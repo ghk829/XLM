@@ -26,6 +26,8 @@ def build_nmt_domain_feature(data, params, batches, dataset):
     decoder.eval()
     params.reload_model = params.build_nmt_base_feature  # 'best-test_de-en_mt_bleu.pth,best-test_de-en_mt_bleu.pth'
     base_encoder, base_decoder = build_model(params, data['dico'])
+    base_encoder.eval()
+    base_decoder.eval()
     qzs = torch.Tensor([])
     for lang1, lang2 in set(params.mt_steps + [(l2, l3) for _, l2, l3 in params.bt_steps]):
 
@@ -77,5 +79,79 @@ def build_nmt_domain_feature(data, params, batches, dataset):
 
             qz = torch.Tensor([((f - b).sum() / l).cpu() for f, b, l in zip(domain_finetuned, domain_based, length_y)])
             qzs = torch.cat((qzs, qz))
+
+    return qzs
+
+
+@nograd
+def build_nlm_domain_feature(data, params, indices, dataset):
+    from src.model import build_model
+    import copy
+    import numpy as np
+
+    params = copy.copy(params)
+    params.reload_model = params.build_nlm_domain_feature  # 'multi-domain.pth,multi-domain.pth'
+    encoder  = build_model(params, data['dico'])
+    encoder.eval()
+    params.reload_model = params.build_nlm_base_feature  # 'best-test_de-en_mt_bleu.pth,best-test_de-en_mt_bleu.pth'
+    base_encoder  = build_model(params, data['dico'])
+    base_encoder.eval()
+    qzs = torch.Tensor([])
+    for lang1, lang2 in set(params.clm_steps):
+
+        # lang1_id = params.lang2id[lang1]
+        # lang2_id = params.lang2id[lang2]
+        logger.info(len(indices))
+        i = 0
+        for sentence_ids in indices:
+            i += 1
+            logger.info(i)
+
+            a = dataset.bptt * sentence_ids
+            b = dataset.bptt * (sentence_ids + 1)
+            x, lengths = torch.from_numpy(dataset.data[a:b].astype(np.int64)), dataset.lengths
+
+            positions = None
+            langs = None
+
+            alen = torch.arange(lengths.max(), dtype=torch.long, device=lengths.device)
+            pred_mask = alen[:, None] < lengths[None] - 1
+            if params.context_size > 0:  # do not predict without context
+                pred_mask[:params.context_size] = 0
+            y = x[1:].masked_select(pred_mask[:-1])
+            assert pred_mask.sum().item() == y.size(0)
+
+            x, lengths, langs, pred_mask, y = to_cuda(x, lengths, langs, pred_mask, y)
+
+            qz1 = []
+            qz2 = []
+            tensor = encoder('fwd', x=x, lengths=lengths, positions=positions, langs=langs, causal=True)
+            tensor = tensor.permute(1,0,2)
+            pred_mask = pred_mask.permute(1,0)
+            length_y = (lengths - 1).cpu().tolist()
+            for xx,mm, yy in zip(tensor,pred_mask,torch.split(y,length_y)):
+                word_scores, loss = encoder('predict', tensor=xx, pred_mask=mm, y=yy, get_scores=True)
+                xe_loss = loss.item() * len(yy)
+                n_words = yy.size(0)
+                domain_finetuned = np.exp(xe_loss / n_words)
+                qz1.append(domain_finetuned)
+            # word_scores, loss = decoder('predict', tensor=dec2, pred_mask=pred_mask, y=y, get_scores=True)
+            # length_y = (len2 - 1).cpu().tolist()
+            # scores = torch.Tensor([torch.index_select(score, 0, ref) for score, ref in
+            #                        zip(F.log_softmax(word_scores, dim=-1), y)]).to(len2.device)
+            # domain_finetuned = torch.split(scores, length_y)
+
+            tensor = base_encoder('fwd', x=x, lengths=lengths, langs=langs, causal=True)
+            tensor = tensor.permute(1, 0, 2)
+            for xx, mm, yy in zip(tensor, pred_mask, torch.split(y, length_y)):
+                word_scores, loss = base_encoder('predict', tensor=xx, pred_mask=mm, y=yy, get_scores=True)
+                xe_loss = loss.item() * len(yy)
+                n_words = yy.size(0)
+                domain_based = np.exp(xe_loss / n_words)
+                qz2.append(domain_based)
+            qz1 = np.array(qz1)
+            qz2 = np.array(qz2)
+            qz = (qz1 - qz2)
+            qzs = np.concatenate((qzs, qz))
 
     return qzs

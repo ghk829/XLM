@@ -241,7 +241,8 @@ def get_parser():
     parser.add_argument('--build_nmt_domain_feature',type=str,default='')
     parser.add_argument('--build_nmt_base_feature', type=str, default='')
     parser.add_argument('--build_output_path', type=str, default='')
-    parser.add_argument('--build_single_domain_nlm_feature',type=str,default='')
+    parser.add_argument('--build_nlm_domain_feature',type=str,default='')
+    parser.add_argument('--build_nlm_base_feature', type=str, default='')
 
     parser.add_argument('--lstm',type=bool_flag,default=False)
     return parser
@@ -272,6 +273,19 @@ def main(params):
         )
 
         features = build_nmt_domain_feature(data, params, batches, dataset)
+        result = {'indices':indices,'domain_feature':features}
+        torch.save(result,params.build_output_path)
+        return
+
+    if params.build_nlm_domain_feature:
+        import torch
+        from src.curriculum import build_nlm_domain_feature
+        dataset = data['mono_stream']['en']['train']
+        indices = dataset.get_iterator(
+            shuffle=False
+        )
+
+        features = build_nlm_domain_feature(data, params, indices, dataset)
         result = {'indices':indices,'domain_feature':features}
         torch.save(result,params.build_output_path)
         return

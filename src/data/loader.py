@@ -10,7 +10,7 @@ import os
 import numpy as np
 import torch
 
-from .dataset import StreamDataset, Dataset, ParallelDataset, DomainParallelDataset, CurriculumDataset
+from .dataset import StreamDataset, Dataset, ParallelDataset, DomainParallelDataset, CurriculumDataset, CurriculumStreamDataset
 from .dictionary import BOS_WORD, EOS_WORD, PAD_WORD, UNK_WORD, MASK_WORD
 
 logger = getLogger()
@@ -161,6 +161,67 @@ def load_mono_data(params, data):
 
     logger.info("")
 
+
+def load_cur_mono_data(params, data):
+    """
+        Load monolingual data.
+        """
+    data['mono'] = {}
+    data['mono_stream'] = {}
+
+    for lang in params.mono_dataset.keys():
+
+        logger.info('============ Monolingual data (%s)' % lang)
+
+        assert lang in params.langs and lang not in data['mono']
+        data['mono'][lang] = {}
+        data['mono_stream'][lang] = {}
+
+        for splt in ['train', 'valid', 'test']:
+
+            # no need to load training data for evaluation
+            if splt == 'train' and params.eval_only:
+                continue
+
+            # load data / update dictionary parameters / update data
+            mono_data = load_binarized(params.mono_dataset[lang][splt], params)
+            set_dico_parameters(params, data, mono_data['dico'])
+
+            # create stream dataset
+            bs = params.batch_size if splt == 'train' else 1
+            data['mono_stream'][lang][splt] = CurriculumStreamDataset(mono_data['sentences'], mono_data['positions'], bs, params)
+
+            # if there are several processes on the same machine, we can split the dataset
+            if splt == 'train' and params.split_data and 1 < params.n_gpu_per_node <= data['mono_stream'][lang][
+                splt].n_batches:
+                n_batches = data['mono_stream'][lang][splt].n_batches // params.n_gpu_per_node
+                a = n_batches * params.local_rank
+                b = n_batches * params.local_rank + n_batches
+                data['mono_stream'][lang][splt].select_data(a, b)
+
+            # for denoising auto-encoding and online back-translation, we need a non-stream (batched) dataset
+            if lang in params.ae_steps or lang in params.bt_src_langs:
+
+                # create batched dataset
+                dataset = Dataset(mono_data['sentences'], mono_data['positions'], params)
+
+                # remove empty and too long sentences
+                if splt == 'train':
+                    dataset.remove_empty_sentences()
+                    dataset.remove_long_sentences(params.max_len)
+
+                # if there are several processes on the same machine, we can split the dataset
+                if splt == 'train' and params.n_gpu_per_node > 1 and params.split_data:
+                    n_sent = len(dataset) // params.n_gpu_per_node
+                    a = n_sent * params.local_rank
+                    b = n_sent * params.local_rank + n_sent
+                    dataset.select_data(a, b)
+
+                data['mono'][lang][splt] = dataset
+
+            logger.info("")
+
+    logger.info("")
 
 def load_para_data(params, data):
     """
@@ -492,8 +553,10 @@ def load_data(params):
     data = {}
 
     # monolingual datasets
-    load_mono_data(params, data)
-
+    if params.curriculum_learning:
+        load_cur_mono_data(params, data)
+    else:
+        load_mono_data(params, data)
     # parallel datasets
     if params.domains:
 
