@@ -29,11 +29,13 @@ def build_nmt_domain_feature(data, params, batches, dataset):
     base_encoder.eval()
     base_decoder.eval()
     qzs = torch.Tensor([])
+    qzss = torch.Tensor([])
     for lang1, lang2 in set(params.mt_steps + [(l2, l3) for _, l2, l3 in params.bt_steps]):
 
         lang1_id = params.lang2id[lang1]
         lang2_id = params.lang2id[lang2]
         logger.info(len(batches))
+        batch_length = int(len(batches) / 10)
         i = 0
         for sentence_ids in batches:
             i += 1
@@ -78,8 +80,12 @@ def build_nmt_domain_feature(data, params, batches, dataset):
             domain_based = torch.split(scores, length_y)
 
             qz = torch.Tensor([((f - b).sum() / l).cpu() for f, b, l in zip(domain_finetuned, domain_based, length_y)])
-            qzs = torch.cat((qzs, qz))
-
+            qzss = torch.cat((qzss, qz))
+            if i % batch_length == 0:
+                qzs = torch.cat((qzs, qzss))
+        qzs = torch.cat((qzs, qzss))
+        if len(qzss) != 0:
+            qzs = torch.cat((qzs, qzss))
     return qzs
 
 
@@ -97,11 +103,13 @@ def build_nlm_domain_feature(data, params, indices, dataset):
     base_encoder  = build_model(params, data['dico'])
     base_encoder.eval()
     qzs = torch.Tensor([])
+    qzss = torch.Tensor([])
     for lang1, lang2 in set(params.clm_steps):
 
         # lang1_id = params.lang2id[lang1]
         # lang2_id = params.lang2id[lang2]
         logger.info(len(indices))
+        batch_length = int(len(indices) / 10)
         i = 0
         for sentence_ids in indices:
             i += 1
@@ -149,9 +157,13 @@ def build_nlm_domain_feature(data, params, indices, dataset):
                 n_words = yy.size(0)
                 domain_based = np.exp(xe_loss / n_words)
                 qz2.append(domain_based)
-            qz1 = np.array(qz1)
-            qz2 = np.array(qz2)
+            qz1 = torch.Tensor(np.array(qz1))
+            qz2 = torch.Tensor(np.array(qz2))
             qz = (qz1 - qz2)
-            qzs = np.concatenate((qzs, qz))
+            qzss = torch.cat((qzss, qz))
+            if i % batch_length ==0:
+                qzs = torch.cat((qzs,qzss))
+        if len(qzss) != 0:
+            qzs = torch.cat((qzs, qzss))
 
     return qzs
