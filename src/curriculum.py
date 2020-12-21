@@ -90,7 +90,7 @@ def build_nmt_domain_feature(data, params, batches, dataset):
 
 
 @nograd
-def build_nlm_domain_feature(data, params, indices, dataset):
+def build_nlm_domain_feature(data, params, batches, dataset):
     from src.model import build_model
     import copy
     import numpy as np
@@ -108,16 +108,19 @@ def build_nlm_domain_feature(data, params, indices, dataset):
 
         # lang1_id = params.lang2id[lang1]
         # lang2_id = params.lang2id[lang2]
-        logger.info(len(indices))
-        batch_length = int(len(indices) / 10)
+        logger.info(len(batches))
+        batch_length = int(len(batches) / 10)
         i = 0
-        for sentence_ids in indices:
+        for sentence_ids in batches:
             i += 1
             logger.info(i)
 
-            a = dataset.bptt * sentence_ids
-            b = dataset.bptt * (sentence_ids + 1)
-            x, lengths = torch.from_numpy(dataset.data[a:b].astype(np.int64)), dataset.lengths
+            # a = dataset.bptt * sentence_ids
+            # b = dataset.bptt * (sentence_ids + 1)
+            # x, lengths = torch.from_numpy(dataset.data[a:b].astype(np.int64)), dataset.lengths
+            pos1 = dataset.pos1[sentence_ids]
+            sent1 = dataset.batch_sentences([dataset.sent1[a:b] for a, b in pos1])
+            x, lengths = sent1
 
             positions = None
             langs = None

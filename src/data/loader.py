@@ -289,6 +289,8 @@ def load_cur_para_data(params,data):
     """
         Load parallel data.
         """
+    data['mono'] = {}
+    data['mono_stream'] = {}
     data['para'] = {}
 
     required_para_train = set(params.clm_steps + params.mlm_steps + params.pc_steps + params.mt_steps)
@@ -457,7 +459,7 @@ def check_data_params(params):
     assert all([l1 in params.langs and l2 in params.langs for l1, l2 in params.mt_steps])
     assert all([l1 != l2 for l1, l2 in params.mt_steps])
     assert len(params.mt_steps) == len(set(params.mt_steps))
-    assert len(params.mt_steps) == 0 or not params.encoder_only
+    #assert len(params.mt_steps) == 0 or not params.encoder_only
 
     # denoising auto-encoder steps
     params.ae_steps = [s for s in params.ae_steps.split(',') if len(s) > 0]
@@ -554,7 +556,7 @@ def load_data(params):
 
     # monolingual datasets
     if params.curriculum_learning:
-        load_cur_mono_data(params, data)
+        load_cur_para_data(params, data)
     else:
         load_mono_data(params, data)
     # parallel datasets

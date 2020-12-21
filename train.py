@@ -280,12 +280,18 @@ def main(params):
     if params.build_nlm_domain_feature:
         import torch
         from src.curriculum import build_nlm_domain_feature
-        dataset = data['mono_stream']['en']['train']
-        indices = dataset.get_iterator(
-            shuffle=False
+        dataset = data['para'][('de', 'en')]['train']
+        batches, indices = dataset.get_iterator(
+            shuffle=False,
+            group_by_size=params.group_by_size,
+            n_sentences=-1,
         )
+        # dataset = data['mono_stream']['en']['train']
+        # indices = dataset.get_iterator(
+        #     shuffle=False
+        # )
 
-        features = build_nlm_domain_feature(data, params, indices, dataset)
+        features = build_nlm_domain_feature(data, params, batches, dataset)
         result = {'indices':indices,'domain_feature':features}
         torch.save(result,params.build_output_path)
         return
