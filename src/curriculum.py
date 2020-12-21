@@ -104,7 +104,7 @@ def build_nlm_domain_feature(data, params, batches, dataset):
     base_encoder.eval()
     qzs = torch.Tensor([])
     qzss = torch.Tensor([])
-    for lang1, lang2 in set(params.clm_steps):
+    for lang1, lang2 in set(params.mt_steps):
 
         # lang1_id = params.lang2id[lang1]
         # lang2_id = params.lang2id[lang2]
@@ -118,9 +118,13 @@ def build_nlm_domain_feature(data, params, batches, dataset):
             # a = dataset.bptt * sentence_ids
             # b = dataset.bptt * (sentence_ids + 1)
             # x, lengths = torch.from_numpy(dataset.data[a:b].astype(np.int64)), dataset.lengths
-            pos1 = dataset.pos1[sentence_ids]
-            sent1 = dataset.batch_sentences([dataset.sent1[a:b] for a, b in pos1])
-            x, lengths = sent1
+            if lang1 == 'en':
+                pos = dataset.pos1[sentence_ids]
+                sent = dataset.batch_sentences([dataset.sent1[a:b] for a, b in pos])
+            elif lang2 == 'en':
+                pos = dataset.pos2[sentence_ids]
+                sent = dataset.batch_sentences([dataset.sent2[a:b] for a, b in pos])
+            x, lengths = sent
 
             positions = None
             langs = None
