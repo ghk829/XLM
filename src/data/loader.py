@@ -292,7 +292,9 @@ def load_cur_para_data(params,data):
     data['mono'] = {}
     data['mono_stream'] = {}
     data['para'] = {}
-
+    splts = ['train', 'valid', 'test']
+    if params.build_output_path:
+        splts = ['train']
     required_para_train = set(params.clm_steps + params.mlm_steps + params.pc_steps + params.mt_steps)
 
     for src, tgt in params.para_dataset.keys():
@@ -302,7 +304,7 @@ def load_cur_para_data(params,data):
         assert (src, tgt) not in data['para']
         data['para'][(src, tgt)] = {}
 
-        for splt in ['train', 'valid', 'test']:
+        for splt in splts:
 
             # no need to load training data for evaluation
             if splt == 'train' and params.eval_only:
