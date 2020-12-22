@@ -618,7 +618,7 @@ class Trainer(object):
         End the epoch.
         """
         # stop if the stopping criterion has not improved after a certain number of epochs
-        if self.stopping_criterion is not None and (self.params.is_master or not self.stopping_criterion[0].endswith('_mt_bleu')):
+        if not self.params.dual_encoder and self.stopping_criterion is not None and (self.params.is_master or not self.stopping_criterion[0].endswith('_mt_bleu')):
             metric, biggest = self.stopping_criterion
             assert metric in scores, metric
             factor = 1 if biggest else -1
