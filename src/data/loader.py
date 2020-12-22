@@ -514,7 +514,7 @@ def check_data_params(params):
 
     if params.domains:
         params.domains = params.domains.split(',')
-        if not params.curriculum_learning:
+        if not params.curriculum_learning and not params.dual_encoder:
             params.para_dataset = {
                 (src, tgt, domain): {
                     splt: (os.path.join(params.data_path, domain ,'%s.%s-%s.%s.pth' % (splt, src, tgt, src)),
@@ -566,6 +566,8 @@ def load_data(params):
 
         if params.curriculum_learning:
             load_cur_para_data(params,data)
+        elif params.dual_encoder:
+            load_para_data(params, data)
         else:
             prior_ratios = params.prior_ratios
             load_para_data_with_domain(params,data, prior_ratios)
@@ -581,7 +583,7 @@ def load_data(params):
                 '{: <18} - {: >5} - {: >12}:{: >10}'.format('Monolingual data', data_set, lang, len(v[data_set])))
 
     # parallel data summary
-    if params.domains and not params.curriculum_learning:
+    if params.domains and not params.curriculum_learning and not params.dual_encoder:
         for (src, tgt, domain), v in data['para'].items():
             for data_set in v.keys():
                 logger.info('{: <18} - {: >5} - {: >12}:{: >10}'.format('Parallel data', data_set, '%s-%s-%s' % (src, tgt,domain),

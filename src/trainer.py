@@ -132,7 +132,7 @@ class Trainer(object):
             [('l0-loss',[])]
         )
 
-        if params.domains and not params.curriculum_learning:
+        if params.domains and not params.curriculum_learning and not params.dual_encoder:
             stats = OrderedDict(
             [('CLM-%s-%s' % (l1, l2), []) for l1, l2,domain in data['para'].keys()] +
             [('CLM-%s-%s' % (l2, l1), []) for l1, l2,domain in data['para'].keys()] +
@@ -1418,3 +1418,101 @@ class CurriculumTrainer(Trainer):
         batches = np.array_split(bts, math.ceil(bts.shape[0] / dataset.batch_size))
 
         return batches
+
+
+def exceptEvery(nth, a):
+    m = a.size(0) // nth * nth
+    return torch.cat((a[:m].reshape(-1, nth)[:, :nth - 1].reshape(-1), a[m:m + nth - 1]))
+
+class DualEncoderTrainer(Trainer):
+
+    def __init__(self, encoder1, encoder2, data, params):
+        self.MODEL_NAMES = ['encoder1', 'encoder2']
+
+        # model / data / params
+        self.encoder1 = encoder1
+        self.encoder2 = encoder2
+        self.data = data
+        self.params = params
+        self.domains = params.domains
+        self.scorer = F.cosine_similarity
+        self.margin = 0.3
+
+        super().__init__(data, params)
+
+    def mt_step(self, lang1, lang2, lambda_coeff):
+        """
+        Machine translation step.
+        Can also be used for denoising auto-encoding.
+        """
+        assert lambda_coeff >= 0
+        if lambda_coeff == 0:
+            return
+        params = self.params
+        self.encoder1.train()
+        self.encoder2.train()
+
+        lang1_id = params.lang2id[lang1]
+        lang2_id = params.lang2id[lang2]
+
+        # generate batch
+        if lang1 == lang2:
+            (x1, len1) = self.get_batch('ae', lang1)
+            (x2, len2) = (x1, len1)
+            (x1, len1) = self.add_noise(x1, len1)
+        else:
+            (x1, len1), (x2, len2) = self.get_batch('mt', lang1, lang2)
+        langs1 = x1.clone().fill_(lang1_id)
+        langs2 = x2.clone().fill_(lang2_id)
+
+        # target words to predict
+        alen = torch.arange(len2.max(), dtype=torch.long, device=len2.device)
+        pred_mask = alen[:, None] < len2[None] - 1  # do not predict anything given the last target word
+        y = x2[1:].masked_select(pred_mask[:-1])
+        assert len(y) == (len2 - 1).sum().item()
+
+        # cuda
+        x1, len1, langs1, x2, len2, langs2, y = to_cuda(x1, len1, langs1, x2, len2, langs2, y)
+
+        reg_loss = 0
+        # encode source sentence
+        enc1 = self.encoder1('fwd', x=x1, lengths=len1, langs=langs1, causal=False)
+        enc1 = enc1.transpose(0, 1)
+
+        enc2 = self.encoder2('fwd', x=x2, lengths=len2, langs=langs2, causal=False)
+        enc2 = enc2.transpose(0, 1)
+        numerator = torch.exp(self.scorer(enc1.mean(dim=1),enc2.mean(dim=1)))
+        emb1_loss = 0
+        for exc_index, num in enumerate(numerator):
+            rest = [i for i in range(len(numerator)) if i != exc_index]
+            rest = torch.Tensor(rest).long().to(numerator.device)
+            rest = torch.index_select(numerator, 0, rest)
+            dom = rest.sum() + (num - self.margin)
+            emb1_loss += -torch.log((num-self.margin)/dom)
+
+        enc1 = self.encoder1('fwd', x=x2, lengths=len2, langs=langs2, causal=False)
+        enc1 = enc1.transpose(0, 1)
+
+        enc2 = self.encoder2('fwd', x=x1, lengths=len1, langs=langs1, causal=False)
+        enc2 = enc2.transpose(0, 1)
+        numerator = torch.exp(self.scorer(enc1.mean(dim=1),enc2.mean(dim=1)))
+        emb2_loss = 0
+        for exc_index, num in enumerate(numerator):
+            rest = [i for i in range(len(numerator)) if i != exc_index]
+            rest = torch.Tensor(rest).long().to(numerator.device)
+            rest = torch.index_select(numerator, 0, rest)
+            dom = rest.sum() + (num - self.margin)
+            emb2_loss += -torch.log((num-self.margin) / dom)
+        # predict
+
+        # loss
+        loss = (emb1_loss + emb2_loss) / len(numerator)
+        self.stats[('AE-%s' % lang1) if lang1 == lang2 else ('MT-%s-%s' % (lang1, lang2))].append(loss.item())
+        # optimize
+        self.optimize(loss)
+
+
+        # number of processed sentences / words
+        self.n_sentences += params.batch_size
+        self.stats['processed_s'] += len2.size(0)
+        self.stats['processed_w'] += (len2 - 1).sum().item()

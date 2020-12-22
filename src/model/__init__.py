@@ -144,6 +144,30 @@ def build_model(params, dico):
 
         return model.cuda()
 
+    elif params.dual_encoder:
+        encoder1 = TransformerModel(params, dico, is_encoder=True, with_output=True)
+        encoder2 = TransformerModel(params, dico, is_encoder=True, with_output=True)
+
+        # reload pretrained word embeddings : skip
+
+        # reload a pretrained model
+        if params.reload_model != '':
+            enc_path1, enc_path2 = params.reload_model.split(',')
+            logger.info("Reloading model from %s ..." % params.reload_model)
+            reloaded = torch.load(enc_path1, map_location=lambda storage, loc: storage.cuda(params.local_rank))['model']
+            if all([k.startswith('module.') for k in reloaded.keys()]):
+                reloaded = {k[len('module.'):]: v for k, v in reloaded.items()}
+
+            encoder1.load_state_dict(reloaded)
+
+            logger.info("Reloading model from %s ..." % params.reload_model)
+            reloaded = torch.load(enc_path2, map_location=lambda storage, loc: storage.cuda(params.local_rank))['model']
+            if all([k.startswith('module.') for k in reloaded.keys()]):
+                reloaded = {k[len('module.'):]: v for k, v in reloaded.items()}
+
+            encoder2.load_state_dict(reloaded)
+
+        return encoder1.cuda(), encoder2.cuda()
     else:
 
         if params.local_adapt:

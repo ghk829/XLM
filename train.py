@@ -14,8 +14,8 @@ from src.data.loader import check_data_params, load_data
 from src.utils import bool_flag, initialize_exp, set_sampling_probs, shuf_order
 from src.model import check_model_params, build_model
 from src.model.memory import HashingMemory
-from src.trainer import SingleTrainer, EncDecTrainer, MultiDomainTrainer, CurriculumTrainer
-from src.evaluation.evaluator import SingleEvaluator, EncDecEvaluator, MultiDomainEvaluator, MetaMultiDomainEvaluator
+from src.trainer import SingleTrainer, EncDecTrainer, MultiDomainTrainer, CurriculumTrainer, DualEncoderTrainer
+from src.evaluation.evaluator import SingleEvaluator, EncDecEvaluator, MultiDomainEvaluator, MetaMultiDomainEvaluator, DualEncoderEvaluator
 
 
 def get_parser():
@@ -244,6 +244,9 @@ def get_parser():
     parser.add_argument('--build_nlm_domain_feature',type=str,default='')
     parser.add_argument('--build_nlm_base_feature', type=str, default='')
 
+    # dual encoder & margin loss
+    parser.add_argument('--dual_encoder',type=bool_flag,default=False)
+    # lstm
     parser.add_argument('--lstm',type=bool_flag,default=False)
     return parser
 
@@ -299,6 +302,8 @@ def main(params):
     # build model
     if params.encoder_only:
         model = build_model(params, data['dico'])
+    elif params.dual_encoder:
+        encoder1, encoder2 = build_model(params,data['dico'])
     else:
         encoder, decoder = build_model(params, data['dico'])
 
@@ -309,6 +314,8 @@ def main(params):
     elif params.domains:
         if params.curriculum_learning:
             trainer = CurriculumTrainer(encoder,decoder,data,params)
+        elif params.dual_encoder:
+            trainer = DualEncoderTrainer(encoder1, encoder2,data,params)
         else:
             trainer = MultiDomainTrainer(encoder, decoder, data, params)
         if params.local_adapt:
@@ -316,6 +323,8 @@ def main(params):
         else:
             if params.curriculum_learning:
                 evaluator = EncDecEvaluator(trainer, data, params)
+            elif params.dual_encoder:
+                evaluator = DualEncoderEvaluator(trainer,data,params)
             else:
                 evaluator = MultiDomainEvaluator(trainer, data, params)
     else:
@@ -368,11 +377,11 @@ def main(params):
 
             trainer.iter()
 
-            if params.domains and params.domain_ratio_update_freq > 0 and trainer.n_total_iter % params.domain_ratio_update_freq == 0 and not params.sampling_uniform:
+            if not params.dual_encoder and params.domains and params.domain_ratio_update_freq > 0 and trainer.n_total_iter % params.domain_ratio_update_freq == 0 and not params.sampling_uniform:
                 evaluator.update_language_sampler_multidomain()
                 evaluator.update_dataset_ratio(trainer)
 
-            if params.domain_reset_freq > 0 and trainer.n_total_iter % params.domain_reset_freq ==0:
+            if not params.dual_encoder and params.domain_reset_freq > 0 and trainer.n_total_iter % params.domain_reset_freq ==0:
                 evaluator.reset_dataset_ratio(trainer)
 
 

@@ -1274,3 +1274,20 @@ class MetaMultiDomainEvaluator(MultiDomainEvaluator):
                     del decoder_fast_params
                     del loss
                     torch.cuda.empty_cache()
+
+
+class DualEncoderEvaluator(Evaluator):
+
+    def __init__(self, trainer, data, params):
+        """
+        Build encoder / decoder evaluator.
+        """
+        super().__init__(trainer, data, params)
+        self.encoder1 = trainer.encoder1
+        self.encoder2 = trainer.encoder2
+
+    def evaluate_mt(self, scores, data_set, lang1, lang2, eval_bleu):
+        """
+        Evaluate perplexity and next word prediction accuracy.
+        """
+        pass
