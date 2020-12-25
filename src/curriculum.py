@@ -83,7 +83,7 @@ def build_nmt_domain_feature(data, params, batches, dataset):
             qzss = torch.cat((qzss, qz))
             if i % batch_length == 0:
                 qzs = torch.cat((qzs, qzss))
-        qzs = torch.cat((qzs, qzss))
+                qzss = torch.Tensor([])
         if len(qzss) != 0:
             qzs = torch.cat((qzs, qzss))
     return qzs
@@ -170,6 +170,7 @@ def build_nlm_domain_feature(data, params, batches, dataset):
             qzss = torch.cat((qzss, qz))
             if i % batch_length ==0:
                 qzs = torch.cat((qzs,qzss))
+                qzss = torch.Tensor([])
         if len(qzss) != 0:
             qzs = torch.cat((qzs, qzss))
 
