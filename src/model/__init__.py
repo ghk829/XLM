@@ -167,6 +167,8 @@ def build_model(params, dico):
 
             encoder2.load_state_dict(reloaded)
 
+        encoder2 = encoder1
+
         return encoder1.cuda(), encoder2.cuda()
     else:
 
