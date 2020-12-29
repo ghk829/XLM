@@ -1353,13 +1353,10 @@ class CurriculumTrainer(Trainer):
         self.iterators[(iter_name, lang1, lang2)] = iterator
         return iterator
 
-    def multiple_nmt_domain_feature(self,batches,dataset):
+    def multiple_nmt_domain_feature(self, batches, dataset):
         return torch.load(self.params.multiple_nmt_domain_feature)['multi_domain_features']
 
-    def single_nmt_domain_feature(self,domain_feature):
-        return torch.load(domain_feature)['domain_feature']
-
-    def single_nlm_domain_feature(self,domain_feature):
+    def single_domain_feature(self, domain_feature):
         return torch.load(domain_feature)['domain_feature']
 
     def get_features(self,batches,dataset):
@@ -1379,7 +1376,7 @@ class CurriculumTrainer(Trainer):
             for domain_feature in self.params.finetune_nmt_domain_features.split(','):
                 print('start nmt feature')
                 s = time.time()
-                nmt_features = self.single_nmt_domain_feature(domain_feature)
+                nmt_features = self.single_domain_feature(domain_feature)
                 print(time.time() - s)
                 features.append(nmt_features)
                 num_features += 1
@@ -1388,10 +1385,18 @@ class CurriculumTrainer(Trainer):
             for domain_feature in self.params.finetune_nlm_domain_features.split(','):
                 print('start nlm feature')
                 s = time.time()
-                nmt_features = self.single_nlm_domain_feature(domain_feature)
+                nmt_features = self.single_domain_feature(domain_feature)
                 print(time.time() - s)
                 features.append(nmt_features)
                 num_features += 1
+
+        if self.params.cross_lingual_embedding:
+            print('start cross_lingual_embedding feature')
+            s = time.time()
+            nmt_features = self.single_domain_feature(self.params.cross_lingual_embedding)
+            print(time.time() - s)
+            features.append(nmt_features)
+            num_features += 1
 
         # multi features & batch
         multi_features = torch.cat(features).reshape(num_features,-1).transpose(1,0)
