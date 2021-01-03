@@ -15,7 +15,8 @@ from src.utils import bool_flag, initialize_exp, set_sampling_probs, shuf_order
 from src.model import check_model_params, build_model
 from src.model.memory import HashingMemory
 from src.trainer import SingleTrainer, EncDecTrainer, MultiDomainTrainer, CurriculumTrainer, DualEncoderTrainer
-from src.evaluation.evaluator import SingleEvaluator, EncDecEvaluator, MultiDomainEvaluator, MetaMultiDomainEvaluator, DualEncoderEvaluator
+from src.evaluation.evaluator import SingleEvaluator, EncDecEvaluator, MultiDomainEvaluator, MetaMultiDomainEvaluator, \
+    DualEncoderEvaluator
 
 
 def get_parser():
@@ -184,7 +185,7 @@ def get_parser():
     parser.add_argument("--reload_checkpoint", type=str, default="",
                         help="Reload a checkpoint")
 
-    parser.add_argument("--is_adapt",type=bool_flag,default=False,
+    parser.add_argument("--is_adapt", type=bool_flag, default=False,
                         help="Adaptation for Domain")
 
     # beam search (for MT only)
@@ -216,43 +217,43 @@ def get_parser():
                         help="Master port (for multi-node SLURM jobs)")
 
     # specialize-heads
-    parser.add_argument('--freeze_heads',type=str,default='')
+    parser.add_argument('--freeze_heads', type=str, default='')
 
     # pruning-heads
-    parser.add_argument('--l0_weight',type=float,default=0)
+    parser.add_argument('--l0_weight', type=float, default=0)
     parser.add_argument('--dec_self', type=bool_flag, default=False)
 
     # adaptive sampling ratio
-    parser.add_argument('--domains',type=str,default='')
-    parser.add_argument('--data_actor_lr',type=float,default=0.01)
-    parser.add_argument('--data_actor_optim_step',type=int,default=1)
-    parser.add_argument('--scale_reward',type=bool_flag,default=True)
-    parser.add_argument('--domain_ratio_update_freq',type=int,default=0)
+    parser.add_argument('--domains', type=str, default='')
+    parser.add_argument('--data_actor_lr', type=float, default=0.01)
+    parser.add_argument('--data_actor_optim_step', type=int, default=1)
+    parser.add_argument('--scale_reward', type=bool_flag, default=True)
+    parser.add_argument('--domain_ratio_update_freq', type=int, default=0)
     parser.add_argument('--domain_reset_freq', type=int, default=0)
-    parser.add_argument('--sampling_uniform',type=bool_flag,default=False)
-    parser.add_argument('--local_adapt',type=bool_flag,default=False)
-
+    parser.add_argument('--sampling_uniform', type=bool_flag, default=False)
+    parser.add_argument('--local_adapt', type=bool_flag, default=False)
 
     # curriculum learning
-    parser.add_argument('--curriculum_learning',type=bool_flag,default=False)
-    parser.add_argument('--multiple_nmt_domain_feature',type=str,default='')
+    parser.add_argument('--curriculum_learning', type=bool_flag, default=False)
+    parser.add_argument('--multiple_nmt_domain_feature', type=str, default='')
+    parser.add_argument('--finetune_nmt_domain_features', type=str, default='')
+    parser.add_argument('--finetune_nlm_domain_features', type=str, default='')
 
     # build features
-    parser.add_argument('--build_nmt_domain_feature',type=str,default='')
+    parser.add_argument('--build_nmt_domain_feature', type=str, default='')
     parser.add_argument('--build_nmt_base_feature', type=str, default='')
     parser.add_argument('--build_output_path', type=str, default='')
-    parser.add_argument('--build_nlm_domain_feature',type=str,default='')
+    parser.add_argument('--build_nlm_domain_feature', type=str, default='')
     parser.add_argument('--build_nlm_base_feature', type=str, default='')
 
     # dual encoder & margin loss
-    parser.add_argument('--dual_encoder',type=bool_flag,default=False)
+    parser.add_argument('--dual_encoder', type=bool_flag, default=False)
     # lstm
-    parser.add_argument('--lstm',type=bool_flag,default=False)
+    parser.add_argument('--lstm', type=bool_flag, default=False)
     return parser
 
 
 def main(params):
-
     # initialize the multi-GPU / multi-node training
     init_distributed_mode(params)
 
@@ -276,8 +277,8 @@ def main(params):
         )
 
         features = build_nmt_domain_feature(data, params, batches, dataset)
-        result = {'indices':indices,'domain_feature':features}
-        torch.save(result,params.build_output_path)
+        result = {'indices': indices, 'domain_feature': features}
+        torch.save(result, params.build_output_path)
         return
 
     if params.build_nlm_domain_feature:
@@ -295,15 +296,15 @@ def main(params):
         # )
 
         features = build_nlm_domain_feature(data, params, batches, dataset)
-        result = {'indices':indices,'domain_feature':features}
-        torch.save(result,params.build_output_path)
+        result = {'indices': indices, 'domain_feature': features}
+        torch.save(result, params.build_output_path)
         return
 
     # build model
     if params.encoder_only:
         model = build_model(params, data['dico'])
     elif params.dual_encoder:
-        encoder1, encoder2 = build_model(params,data['dico'])
+        encoder1, encoder2 = build_model(params, data['dico'])
     else:
         encoder, decoder = build_model(params, data['dico'])
 
@@ -313,9 +314,9 @@ def main(params):
         evaluator = SingleEvaluator(trainer, data, params)
     elif params.domains:
         if params.curriculum_learning:
-            trainer = CurriculumTrainer(encoder,decoder,data,params)
+            trainer = CurriculumTrainer(encoder, decoder, data, params)
         elif params.dual_encoder:
-            trainer = DualEncoderTrainer(encoder1, encoder2,data,params)
+            trainer = DualEncoderTrainer(encoder1, encoder2, data, params)
         else:
             trainer = MultiDomainTrainer(encoder, decoder, data, params)
         if params.local_adapt:
@@ -324,7 +325,7 @@ def main(params):
             if params.curriculum_learning:
                 evaluator = EncDecEvaluator(trainer, data, params)
             elif params.dual_encoder:
-                evaluator = DualEncoderEvaluator(trainer,data,params)
+                evaluator = DualEncoderEvaluator(trainer, data, params)
             else:
                 evaluator = MultiDomainEvaluator(trainer, data, params)
     else:
@@ -381,9 +382,8 @@ def main(params):
                 evaluator.update_language_sampler_multidomain()
                 evaluator.update_dataset_ratio(trainer)
 
-            if not params.dual_encoder and params.domain_reset_freq > 0 and trainer.n_total_iter % params.domain_reset_freq ==0:
+            if not params.dual_encoder and params.domain_reset_freq > 0 and trainer.n_total_iter % params.domain_reset_freq == 0:
                 evaluator.reset_dataset_ratio(trainer)
-
 
         logger.info("============ End of epoch %i ============" % trainer.epoch)
 
