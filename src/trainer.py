@@ -1487,13 +1487,16 @@ class DualEncoderTrainer(Trainer):
         enc2 = self.encoder2('fwd', x=x2, lengths=len2, langs=langs2, causal=False)
         enc2 = enc2.transpose(0, 1)
         numerator = torch.exp(self.scorer(enc1.mean(dim=1),enc2.mean(dim=1)))
-        emb1_loss = 0
-        for exc_index, num in enumerate(numerator):
-            rest = [i for i in range(len(numerator)) if i != exc_index]
-            rest = torch.Tensor(rest).long().to(numerator.device)
-            rest = torch.index_select(numerator, 0, rest)
-            dom = rest.sum() + (num - self.margin)
-            emb1_loss += -torch.log((num-self.margin)/dom)
+        # emb1_loss = 0
+        repeated =  numerator.repeat(len(numerator)).reshape(len(numerator),len(numerator))
+        torch.diagonal(repeated)[:] -= self.margin
+        emb1_loss = -torch.log(torch.diagonal(repeated) / repeated.sum(dim=1)).sum()
+        # for exc_index, num in enumerate(numerator):
+        #     rest = [i for i in range(len(numerator)) if i != exc_index]
+        #     rest = torch.Tensor(rest).long().to(numerator.device)
+        #     rest = torch.index_select(numerator, 0, rest)
+        #     dom = rest.sum() + (num - self.margin)
+        #     emb1_loss += -torch.log((num-self.margin)/dom)
 
         enc1 = self.encoder1('fwd', x=x2, lengths=len2, langs=langs2, causal=False)
         enc1 = enc1.transpose(0, 1)
@@ -1501,13 +1504,16 @@ class DualEncoderTrainer(Trainer):
         enc2 = self.encoder2('fwd', x=x1, lengths=len1, langs=langs1, causal=False)
         enc2 = enc2.transpose(0, 1)
         numerator = torch.exp(self.scorer(enc1.mean(dim=1),enc2.mean(dim=1)))
-        emb2_loss = 0
-        for exc_index, num in enumerate(numerator):
-            rest = [i for i in range(len(numerator)) if i != exc_index]
-            rest = torch.Tensor(rest).long().to(numerator.device)
-            rest = torch.index_select(numerator, 0, rest)
-            dom = rest.sum() + (num - self.margin)
-            emb2_loss += -torch.log((num-self.margin) / dom)
+        repeated =  numerator.repeat(len(numerator)).reshape(len(numerator),len(numerator))
+        torch.diagonal(repeated)[:] -= self.margin
+        emb2_loss = -torch.log(torch.diagonal(repeated) / repeated.sum(dim=1)).sum()
+        # emb2_loss = 0
+        # for exc_index, num in enumerate(numerator):
+        #     rest = [i for i in range(len(numerator)) if i != exc_index]
+        #     rest = torch.Tensor(rest).long().to(numerator.device)
+        #     rest = torch.index_select(numerator, 0, rest)
+        #     dom = rest.sum() + (num - self.margin)
+        #     emb2_loss += -torch.log((num-self.margin) / dom)
         # predict
 
         # loss
