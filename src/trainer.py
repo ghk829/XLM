@@ -1433,15 +1433,15 @@ class DualEncoderTrainer(Trainer):
 
     def __init__(self, encoder1, encoder2, data, params):
         self.MODEL_NAMES = ['encoder1', 'encoder2']
-
+        from functools import partial
         # model / data / params
         self.encoder1 = encoder1
         self.encoder2 = encoder2
         self.data = data
         self.params = params
         self.domains = params.domains
-        self.scorer = F.cosine_similarity
-        self.margin = 0.3
+        self.scorer = F.cosine_similarity #partial(torch.cdist,p=2)
+        self.margin = 0
 
         super().__init__(data, params)
 
@@ -1481,14 +1481,16 @@ class DualEncoderTrainer(Trainer):
 
         reg_loss = 0
         # encode source sentence
-        enc1 = self.encoder1('fwd', x=x1, lengths=len1, langs=langs1, causal=False)
+        enc1 = self.encoder1('fwd', x=x1, lengths=len1, langs=langs1, causal=True)
         enc1 = enc1.transpose(0, 1)
 
-        enc2 = self.encoder2('fwd', x=x2, lengths=len2, langs=langs2, causal=False)
+        enc2 = self.encoder2('fwd', x=x2, lengths=len2, langs=langs2, causal=True)
         enc2 = enc2.transpose(0, 1)
-        numerator = torch.exp(self.scorer(enc1.mean(dim=1),enc2.mean(dim=1)))
+        enc1_list = torch.stack([e[:l].mean(dim=0) for e, l in zip(enc1, len1)])
+        enc2_list = torch.stack([e[:l].mean(dim=0) for e, l in zip(enc2, len2)])
+        numerator = torch.exp(self.scorer(enc1_list,enc2_list))
         # emb1_loss = 0
-        repeated =  numerator.repeat(len(numerator)).reshape(len(numerator),len(numerator))
+        repeated = numerator.repeat(len(numerator)).reshape(len(numerator),len(numerator))
         torch.diagonal(repeated)[:] -= self.margin
         emb1_loss = -torch.log(torch.diagonal(repeated) / repeated.sum(dim=1)).sum()
         # for exc_index, num in enumerate(numerator):
@@ -1498,12 +1500,14 @@ class DualEncoderTrainer(Trainer):
         #     dom = rest.sum() + (num - self.margin)
         #     emb1_loss += -torch.log((num-self.margin)/dom)
 
-        enc1 = self.encoder1('fwd', x=x2, lengths=len2, langs=langs2, causal=False)
+        enc1 = self.encoder1('fwd', x=x2, lengths=len2, langs=langs2, causal=True)
         enc1 = enc1.transpose(0, 1)
 
-        enc2 = self.encoder2('fwd', x=x1, lengths=len1, langs=langs1, causal=False)
+        enc2 = self.encoder2('fwd', x=x1, lengths=len1, langs=langs1, causal=True)
         enc2 = enc2.transpose(0, 1)
-        numerator = torch.exp(self.scorer(enc1.mean(dim=1),enc2.mean(dim=1)))
+        enc1_list = torch.stack([e[:l].mean(dim=0) for e, l in zip(enc1, len1)])
+        enc2_list = torch.stack([e[:l].mean(dim=0) for e, l in zip(enc2, len2)])
+        numerator = torch.exp(self.scorer(enc1_list, enc2_list))
         repeated =  numerator.repeat(len(numerator)).reshape(len(numerator),len(numerator))
         torch.diagonal(repeated)[:] -= self.margin
         emb2_loss = -torch.log(torch.diagonal(repeated) / repeated.sum(dim=1)).sum()
@@ -1517,7 +1521,7 @@ class DualEncoderTrainer(Trainer):
         # predict
 
         # loss
-        loss = (emb1_loss + emb2_loss) / len(numerator)
+        loss = (emb1_loss + emb2_loss) / len(numerator) * 1000.
         self.stats[('AE-%s' % lang1) if lang1 == lang2 else ('MT-%s-%s' % (lang1, lang2))].append(loss.item())
         # optimize
         self.optimize(loss)
