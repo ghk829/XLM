@@ -1442,7 +1442,7 @@ class DualEncoderTrainer(Trainer):
         self.domains = params.domains
         self.scorer = F.cosine_similarity #partial(torch.cdist,p=2)
         self.margin = 0
-        self.split_size = 10
+        self.split_size = 16
 
         super().__init__(data, params)
 
@@ -1486,8 +1486,8 @@ class DualEncoderTrainer(Trainer):
 
         enc2 = self.encoder2('fwd', x=x2, lengths=len2, langs=langs2, causal=True)
         enc2 = enc2.transpose(0, 1)
-        enc1_list = [e[0] for e in enc1]
-        enc2_list = [e[0] for e in enc2]
+        enc1_list = [ e[:l].mean(dim=0) for e, l in zip(enc1,len1)]
+        enc2_list = [ e[:l].mean(dim=0) for e, l in zip(enc2,len2)]
         sims = []
         for e1 in enc1_list:
             sim = []
@@ -1498,28 +1498,28 @@ class DualEncoderTrainer(Trainer):
         torch.diagonal(sims)[:] -= self.margin
         numerator = torch.exp(sims)
         emb1_loss = 0
-        for batch in torch.split(numerator, int(len(numerator) / self.split_size)):  # batch : (split_size,split_size)
-            emb1_loss += -torch.log(torch.diagonal(batch) / batch.sum(dim=1)).sum()
+        # for batch in torch.split(numerator, int(len(numerator) / self.split_size)):  # batch : (split_size,split_size)
+        emb1_loss += -torch.log(torch.diagonal(numerator) / numerator.sum(dim=1)).sum()
 
         enc1 = self.encoder1('fwd', x=x2, lengths=len2, langs=langs2, causal=True)
         enc1 = enc1.transpose(0, 1)
 
         enc2 = self.encoder2('fwd', x=x1, lengths=len1, langs=langs1, causal=True)
         enc2 = enc2.transpose(0, 1)
-        enc1_list = [e[0] for e in enc1]
-        enc2_list = [e[0] for e in enc2]
+        enc1_list = [e[:l].mean(dim=0) for e, l in zip(enc1, len1)]
+        enc2_list = [e[:l].mean(dim=0) for e, l in zip(enc2, len2)]
         sims = []
         for e1 in enc1_list:
             sim = []
             for e2 in enc2_list:
                 sim.append(self.scorer(e1.unsqueeze(0), e2.unsqueeze(0)).squeeze())
             sims.append(torch.stack(sim))
-        sims = torch.stack(sims)
+        sims = torch.stack(sims)  # (b,b)
         torch.diagonal(sims)[:] -= self.margin
         numerator = torch.exp(sims)
         emb2_loss = 0
-        for batch in torch.split(numerator, int(len(numerator) / self.split_size)):  # batch : (split_size,split_size)
-            emb2_loss += -torch.log(torch.diagonal(batch) / batch.sum(dim=1)).sum()
+        # for batch in torch.split(numerator, int(len(numerator) / self.split_size)):  # batch : (split_size,split_size)
+        emb2_loss += -torch.log(torch.diagonal(numerator) / numerator.sum(dim=1)).sum()
 
         # loss
         loss = (emb1_loss + emb2_loss) / len(numerator)
