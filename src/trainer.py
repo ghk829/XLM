@@ -1442,6 +1442,7 @@ class DualEncoderTrainer(Trainer):
         self.domains = params.domains
         self.scorer = F.cosine_similarity #partial(torch.cdist,p=2)
         self.margin = 0
+        self.split_size = 10
 
         super().__init__(data, params)
 
@@ -1479,49 +1480,49 @@ class DualEncoderTrainer(Trainer):
         # cuda
         x1, len1, langs1, x2, len2, langs2, y = to_cuda(x1, len1, langs1, x2, len2, langs2, y)
 
-        reg_loss = 0
         # encode source sentence
         enc1 = self.encoder1('fwd', x=x1, lengths=len1, langs=langs1, causal=True)
         enc1 = enc1.transpose(0, 1)
 
         enc2 = self.encoder2('fwd', x=x2, lengths=len2, langs=langs2, causal=True)
         enc2 = enc2.transpose(0, 1)
-        enc1_list = torch.stack([e[:l].mean(dim=0) for e, l in zip(enc1, len1)])
-        enc2_list = torch.stack([e[:l].mean(dim=0) for e, l in zip(enc2, len2)])
-        numerator = torch.exp(self.scorer(enc1_list,enc2_list))
-        # emb1_loss = 0
-        repeated = numerator.repeat(len(numerator)).reshape(len(numerator),len(numerator))
-        torch.diagonal(repeated)[:] -= self.margin
-        emb1_loss = -torch.log(torch.diagonal(repeated) / repeated.sum(dim=1)).sum()
-        # for exc_index, num in enumerate(numerator):
-        #     rest = [i for i in range(len(numerator)) if i != exc_index]
-        #     rest = torch.Tensor(rest).long().to(numerator.device)
-        #     rest = torch.index_select(numerator, 0, rest)
-        #     dom = rest.sum() + (num - self.margin)
-        #     emb1_loss += -torch.log((num-self.margin)/dom)
+        enc1_list = [e[0] for e in enc1]
+        enc2_list = [e[0] for e in enc2]
+        sims = []
+        for e1 in enc1_list:
+            sim = []
+            for e2 in enc2_list:
+                sim.append(self.scorer(e1.unsqueeze(0), e2.unsqueeze(0)).squeeze())
+            sims.append(torch.stack(sim))
+        sims = torch.stack(sims)  # (b,b)
+        torch.diagonal(sims)[:] -= self.margin
+        numerator = torch.exp(sims)
+        emb1_loss = 0
+        for batch in torch.split(numerator, int(len(numerator) / self.split_size)):  # batch : (split_size,split_size)
+            emb1_loss += -torch.log(torch.diagonal(batch) / batch.sum(dim=1)).sum()
 
         enc1 = self.encoder1('fwd', x=x2, lengths=len2, langs=langs2, causal=True)
         enc1 = enc1.transpose(0, 1)
 
         enc2 = self.encoder2('fwd', x=x1, lengths=len1, langs=langs1, causal=True)
         enc2 = enc2.transpose(0, 1)
-        enc1_list = torch.stack([e[:l].mean(dim=0) for e, l in zip(enc1, len1)])
-        enc2_list = torch.stack([e[:l].mean(dim=0) for e, l in zip(enc2, len2)])
-        numerator = torch.exp(self.scorer(enc1_list, enc2_list))
-        repeated =  numerator.repeat(len(numerator)).reshape(len(numerator),len(numerator))
-        torch.diagonal(repeated)[:] -= self.margin
-        emb2_loss = -torch.log(torch.diagonal(repeated) / repeated.sum(dim=1)).sum()
-        # emb2_loss = 0
-        # for exc_index, num in enumerate(numerator):
-        #     rest = [i for i in range(len(numerator)) if i != exc_index]
-        #     rest = torch.Tensor(rest).long().to(numerator.device)
-        #     rest = torch.index_select(numerator, 0, rest)
-        #     dom = rest.sum() + (num - self.margin)
-        #     emb2_loss += -torch.log((num-self.margin) / dom)
-        # predict
+        enc1_list = [e[0] for e in enc1]
+        enc2_list = [e[0] for e in enc2]
+        sims = []
+        for e1 in enc1_list:
+            sim = []
+            for e2 in enc2_list:
+                sim.append(self.scorer(e1.unsqueeze(0), e2.unsqueeze(0)).squeeze())
+            sims.append(torch.stack(sim))
+        sims = torch.stack(sims)
+        torch.diagonal(sims)[:] -= self.margin
+        numerator = torch.exp(sims)
+        emb2_loss = 0
+        for batch in torch.split(numerator, int(len(numerator) / self.split_size)):  # batch : (split_size,split_size)
+            emb2_loss += -torch.log(torch.diagonal(batch) / batch.sum(dim=1)).sum()
 
         # loss
-        loss = (emb1_loss + emb2_loss) / len(numerator) * 1000.
+        loss = (emb1_loss + emb2_loss) / len(numerator)
         self.stats[('AE-%s' % lang1) if lang1 == lang2 else ('MT-%s-%s' % (lang1, lang2))].append(loss.item())
         # optimize
         self.optimize(loss)
