@@ -124,8 +124,9 @@ def build_nlm_domain_feature(data, params, batches, dataset):
             elif lang2 == 'en':
                 pos = dataset.pos2[sentence_ids]
                 sent = dataset.batch_sentences([dataset.sent2[a:b] for a, b in pos])
-            x, lengths = sent
-
+            x, lengths_list = sent
+            x = x.permute(1,0).reshape(-1,1)
+            lengths =lengths_list.sum().reshape(1)
             positions = None
             langs = None
 
