@@ -295,8 +295,8 @@ def main(params):
         #     shuffle=False
         # )
 
-        features = build_nlm_domain_feature(data, params, batches, dataset)
-        result = {'indices': indices, 'domain_feature': features}
+        features, sents = build_nlm_domain_feature(data, params, batches, dataset)
+        result = {'indices': indices, 'domain_feature': features, 'sents': sents}
         torch.save(result, params.build_output_path)
         return
 
