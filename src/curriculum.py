@@ -104,6 +104,7 @@ def build_nlm_domain_feature(data, params, batches, dataset):
     base_encoder.eval()
     qzs = torch.Tensor([])
     qzss = torch.Tensor([])
+    sents = []
     for lang1, lang2 in set(params.mt_steps):
 
         # lang1_id = params.lang2id[lang1]
@@ -156,6 +157,7 @@ def build_nlm_domain_feature(data, params, batches, dataset):
                 n_words = yy.size(0)
                 domain_finetuned = np.exp(xe_loss / n_words)
                 qz1.append(domain_finetuned)
+                sents.append([data['dico'].id2word[word_id] for word_id in yy])
             # word_scores, loss = decoder('predict', tensor=dec2, pred_mask=pred_mask, y=y, get_scores=True)
             # length_y = (len2 - 1).cpu().tolist()
             # scores = torch.Tensor([torch.index_select(score, 0, ref) for score, ref in
@@ -180,4 +182,4 @@ def build_nlm_domain_feature(data, params, batches, dataset):
         if len(qzss) != 0:
             qzs = torch.cat((qzs, qzss))
 
-    return qzs
+    return qzs, sents
