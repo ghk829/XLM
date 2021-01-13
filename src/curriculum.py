@@ -137,6 +137,7 @@ def build_nlm_domain_feature(data, params, batches, dataset):
             assert pred_mask.sum().item() == y.size(0)
 
             x_input = x.permute(1,0).reshape(-1,1)
+            x_input = x_input[x_input != data['dico'].pad_index].reshape(-1, 1)
             lengths = lengths_list.sum().reshape(1)
             lengths_list = lengths_list.tolist()
 
@@ -149,6 +150,8 @@ def build_nlm_domain_feature(data, params, batches, dataset):
             # pred_mask = pred_mask.permute(1,0)
             # length_y = (lengths - 1).cpu().tolist()
             for xx, tt, mm in zip(x.permute(1, 0), tensor.split(lengths_list), pred_mask.permute(1, 0)):
+                mm = mm.masked_select(xx != data['dico'].pad_index)
+                xx = xx.masked_select(xx != data['dico'].pad_index)
                 yy = xx[1:].masked_select(mm[:-1])
                 word_scores, loss = encoder('predict', tensor=tt, pred_mask=mm.reshape(-1,1), y=yy, get_scores=True)
                 xe_loss = loss.item() * len(yy)
@@ -164,6 +167,8 @@ def build_nlm_domain_feature(data, params, batches, dataset):
 
             tensor = base_encoder('fwd', x=x_input, lengths=lengths, langs=langs, causal=True)
             for xx, tt, mm in zip(x.permute(1, 0), tensor.split(lengths_list), pred_mask.permute(1, 0)):
+                mm = mm.masked_select(xx != data['dico'].pad_index)
+                xx = xx.masked_select(xx != data['dico'].pad_index)
                 yy = xx[1:].masked_select(mm[:-1])
                 word_scores, loss = base_encoder('predict', tensor=tt, pred_mask=mm.reshape(-1,1), y=yy, get_scores=True)
                 xe_loss = loss.item() * len(yy)
