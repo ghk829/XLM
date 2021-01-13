@@ -162,10 +162,10 @@ def build_nlm_domain_feature(data, params, batches, dataset):
             #                        zip(F.log_softmax(word_scores, dim=-1), y)]).to(len2.device)
             # domain_finetuned = torch.split(scores, length_y)
 
-            tensor = base_encoder('fwd', x=x, lengths=lengths, langs=langs, causal=True)
+            tensor = base_encoder('fwd', x=x_input, lengths=lengths, langs=langs, causal=True)
             for xx, tt, mm in zip(x.permute(1, 0), tensor.split(lengths_list), pred_mask.permute(1, 0)):
                 yy = xx[1:].masked_select(mm[:-1])
-                word_scores, loss = encoder('predict', tensor=tt, pred_mask=mm.reshape(-1,1), y=yy, get_scores=True)
+                word_scores, loss = base_encoder('predict', tensor=tt, pred_mask=mm.reshape(-1,1), y=yy, get_scores=True)
                 xe_loss = loss.item() * len(yy)
                 n_words = yy.size(0)
                 domain_based = np.exp(xe_loss / n_words)
