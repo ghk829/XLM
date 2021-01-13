@@ -126,18 +126,19 @@ def build_nlm_domain_feature(data, params, batches, dataset):
                 pos = dataset.pos2[sentence_ids]
                 sent = dataset.batch_sentences([dataset.sent2[a:b] for a, b in pos])
             x, lengths_list = sent
-            x = x.permute(1,0).reshape(-1,1)
-            lengths = lengths_list.sum().reshape(1)
-            lengths_list = lengths_list.tolist()
             positions = None
             langs = None
 
-            alen = torch.arange(lengths.max(), dtype=torch.long, device=lengths.device)
-            pred_mask = alen[:, None] < lengths[None] - 1
+            alen = torch.arange(lengths_list.max(), dtype=torch.long, device=lengths_list.device)
+            pred_mask = alen[:, None] < lengths_list[None] - 1
             if params.context_size > 0:  # do not predict without context
                 pred_mask[:params.context_size] = 0
             y = x[1:].masked_select(pred_mask[:-1])
             assert pred_mask.sum().item() == y.size(0)
+
+            x = x.permute(1,0).reshape(-1,1)
+            lengths = lengths_list.sum().reshape(1)
+            lengths_list = lengths_list.tolist()
 
             x, lengths, langs, pred_mask, y = to_cuda(x, lengths, langs, pred_mask, y)
 
