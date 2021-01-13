@@ -144,13 +144,13 @@ def build_nlm_domain_feature(data, params, batches, dataset):
 
             qz1 = []
             qz2 = []
-            tensor = encoder('fwd', x=x, lengths=lengths, positions=positions, langs=langs, causal=True)
+            tensor = encoder('fwd', x=x_input, lengths=lengths, positions=positions, langs=langs, causal=True)
             # tensor = tensor.permute(1,0,2)
             # pred_mask = pred_mask.permute(1,0)
             # length_y = (lengths - 1).cpu().tolist()
-            for xx, mm in zip(tensor.split(lengths_list), pred_mask.permute(1,0)):
-                yy = mm
-                word_scores, loss = encoder('predict', tensor=xx, pred_mask=mm, y=yy, get_scores=True)
+            for xx, tt, mm in zip(x.permute(1, 0), tensor.split(lengths_list), pred_mask.permute(1, 0)):
+                yy = xx[1:].masked_select(mm[:-1])
+                word_scores, loss = encoder('predict', tensor=tt, pred_mask=mm, y=yy, get_scores=True)
                 xe_loss = loss.item() * len(yy)
                 n_words = yy.size(0)
                 domain_finetuned = np.exp(xe_loss / n_words)
@@ -163,8 +163,9 @@ def build_nlm_domain_feature(data, params, batches, dataset):
             # domain_finetuned = torch.split(scores, length_y)
 
             tensor = base_encoder('fwd', x=x, lengths=lengths, langs=langs, causal=True)
-            for xx, mm, yy in zip(tensor.split(lengths_list), pred_mask.split(lengths_list)):
-                word_scores, loss = base_encoder('predict', tensor=xx, pred_mask=mm, y=yy, get_scores=True)
+            for xx, tt, mm in zip(x.permute(1, 0), tensor.split(lengths_list), pred_mask.permute(1, 0)):
+                yy = xx[1:].masked_select(mm[:-1])
+                word_scores, loss = encoder('predict', tensor=tt, pred_mask=mm, y=yy, get_scores=True)
                 xe_loss = loss.item() * len(yy)
                 n_words = yy.size(0)
                 domain_based = np.exp(xe_loss / n_words)
