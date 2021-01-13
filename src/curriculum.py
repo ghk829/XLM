@@ -136,11 +136,11 @@ def build_nlm_domain_feature(data, params, batches, dataset):
             y = x[1:].masked_select(pred_mask[:-1])
             assert pred_mask.sum().item() == y.size(0)
 
-            x = x.permute(1,0).reshape(-1,1)
+            x_input = x.permute(1,0).reshape(-1,1)
             lengths = lengths_list.sum().reshape(1)
             lengths_list = lengths_list.tolist()
 
-            x, lengths, langs, pred_mask, y = to_cuda(x, lengths, langs, pred_mask, y)
+            x_input, x, lengths, langs, pred_mask, y = to_cuda(x_input, x, lengths, langs, pred_mask, y)
 
             qz1 = []
             qz2 = []
@@ -148,11 +148,8 @@ def build_nlm_domain_feature(data, params, batches, dataset):
             # tensor = tensor.permute(1,0,2)
             # pred_mask = pred_mask.permute(1,0)
             # length_y = (lengths - 1).cpu().tolist()
-            length_ys = []
-            for mm in pred_mask.split(lengths_list):
-                length_ys.append(mm.sum().item())
-            for xx, mm, yy in zip(tensor.split(lengths_list), pred_mask.split(lengths_list),
-                                  torch.split(y, length_ys)):
+            for xx, mm in zip(tensor.split(lengths_list), pred_mask.permute(1,0)):
+                yy = mm
                 word_scores, loss = encoder('predict', tensor=xx, pred_mask=mm, y=yy, get_scores=True)
                 xe_loss = loss.item() * len(yy)
                 n_words = yy.size(0)
@@ -166,8 +163,7 @@ def build_nlm_domain_feature(data, params, batches, dataset):
             # domain_finetuned = torch.split(scores, length_y)
 
             tensor = base_encoder('fwd', x=x, lengths=lengths, langs=langs, causal=True)
-            for xx, mm, yy in zip(tensor.split(lengths_list), pred_mask.split(lengths_list),
-                                  torch.split(y, length_ys)):
+            for xx, mm, yy in zip(tensor.split(lengths_list), pred_mask.split(lengths_list)):
                 word_scores, loss = base_encoder('predict', tensor=xx, pred_mask=mm, y=yy, get_scores=True)
                 xe_loss = loss.item() * len(yy)
                 n_words = yy.size(0)
