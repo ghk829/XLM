@@ -126,7 +126,8 @@ def build_nlm_domain_feature(data, params, batches, dataset):
                 sent = dataset.batch_sentences([dataset.sent2[a:b] for a, b in pos])
             x, lengths_list = sent
             x = x.permute(1,0).reshape(-1,1)
-            lengths =lengths_list.sum().reshape(1)
+            lengths = lengths_list.sum().reshape(1)
+            lengths_list = lengths_list.tolist()
             positions = None
             langs = None
 
@@ -142,10 +143,14 @@ def build_nlm_domain_feature(data, params, batches, dataset):
             qz1 = []
             qz2 = []
             tensor = encoder('fwd', x=x, lengths=lengths, positions=positions, langs=langs, causal=True)
-            tensor = tensor.permute(1,0,2)
-            pred_mask = pred_mask.permute(1,0)
-            length_y = (lengths - 1).cpu().tolist()
-            for xx,mm, yy in zip(tensor,pred_mask,torch.split(y,length_y)):
+            # tensor = tensor.permute(1,0,2)
+            # pred_mask = pred_mask.permute(1,0)
+            # length_y = (lengths - 1).cpu().tolist()
+            length_ys = []
+            for mm in pred_mask.split(lengths_list):
+                length_ys.append(mm.sum().item())
+            for xx, mm, yy in zip(tensor.split(lengths_list), pred_mask.split(lengths_list),
+                                  torch.split(y, length_ys)):
                 word_scores, loss = encoder('predict', tensor=xx, pred_mask=mm, y=yy, get_scores=True)
                 xe_loss = loss.item() * len(yy)
                 n_words = yy.size(0)
