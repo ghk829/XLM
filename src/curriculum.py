@@ -145,7 +145,12 @@ def build_nlm_domain_feature(data, params, batches, dataset):
 
             qz1 = []
             qz2 = []
-            tensor = encoder('fwd', x=x_input, lengths=lengths, positions=positions, langs=langs, causal=True)
+            tmp_tensor_list = []
+            for x_batch in x_input.split(256):
+                _lengths = torch.tensor(x_batch.shape[0], device=x_batch.device).reshape(-1)
+                tmp_tensor = encoder('fwd', x=x_batch, lengths=_lengths, positions=positions, langs=langs, causal=True)
+                tmp_tensor_list.append(tmp_tensor)
+            tensor = torch.cat(tmp_tensor_list,dim=0)
             # tensor = tensor.permute(1,0,2)
             # pred_mask = pred_mask.permute(1,0)
             # length_y = (lengths - 1).cpu().tolist()
@@ -165,7 +170,12 @@ def build_nlm_domain_feature(data, params, batches, dataset):
             #                        zip(F.log_softmax(word_scores, dim=-1), y)]).to(len2.device)
             # domain_finetuned = torch.split(scores, length_y)
 
-            tensor = base_encoder('fwd', x=x_input, lengths=lengths, langs=langs, causal=True)
+            tmp_tensor_list = []
+            for x_batch in x_input.split(256):
+                _lengths = torch.tensor(x_batch.shape[0], device=x_batch.device).reshape(-1)
+                tmp_tensor = base_encoder('fwd', x=x_batch, lengths=_lengths, positions=positions, langs=langs, causal=True)
+                tmp_tensor_list.append(tmp_tensor)
+            tensor = torch.cat(tmp_tensor_list,dim=0)
             for xx, tt, mm in zip(x.permute(1, 0), tensor.split(lengths_list), pred_mask.permute(1, 0)):
                 mm = mm.masked_select(xx != data['dico'].pad_index)
                 xx = xx.masked_select(xx != data['dico'].pad_index)
