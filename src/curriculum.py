@@ -185,7 +185,7 @@ def build_nlm_domain_feature(data, params, batches, dataset):
             qzss = torch.cat((qzss, qz))
             if i % batch_length ==0:
                 before_last_index = sent_last_index
-                sent_last_index = len(sents) - before_last_index
+                sent_last_index = len(sents)
                 result = {'domain_feature': qzss, 'sents': sents[before_last_index:sent_last_index]}
                 if params.build_output_path.endswith('pth'):
                     import os
