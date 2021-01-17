@@ -192,7 +192,7 @@ def build_nlm_domain_feature(data, params, batches, dataset):
                     build_output_path = os.dirname(params.build_output_path)
                 else:
                     build_output_path = params.build_output_path
-                print(f'{i}th saved')
+                logger.info(f'{i}th saved')
                 torch.save(result, f'{build_output_path}/{i}.pth')
                 qzs = torch.cat((qzs,qzss))
                 qzss = torch.Tensor([])
