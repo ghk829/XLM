@@ -297,7 +297,11 @@ def main(params):
 
         features, sents = build_nlm_domain_feature(data, params, batches, dataset)
         result = {'indices': indices, 'domain_feature': features, 'sents': sents}
-        torch.save(result, params.build_output_path)
+        if params.build_output_path.endswith('pth'):
+            build_output_path = params.build_output_path
+        else:
+            build_output_path = f'{params.build_output_path}/final.pth'
+        torch.save(result, build_output_path)
         return
 
     # build model

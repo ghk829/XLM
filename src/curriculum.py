@@ -105,6 +105,7 @@ def build_nlm_domain_feature(data, params, batches, dataset):
     qzs = torch.Tensor([])
     qzss = torch.Tensor([])
     sents = []
+    sent_last_index = 0
     for lang1, lang2 in set(params.mt_steps):
 
         # lang1_id = params.lang2id[lang1]
@@ -151,9 +152,6 @@ def build_nlm_domain_feature(data, params, batches, dataset):
                 tmp_tensor = encoder('fwd', x=x_batch, lengths=_lengths, positions=positions, langs=langs, causal=True)
                 tmp_tensor_list.append(tmp_tensor)
             tensor = torch.cat(tmp_tensor_list,dim=0)
-            # tensor = tensor.permute(1,0,2)
-            # pred_mask = pred_mask.permute(1,0)
-            # length_y = (lengths - 1).cpu().tolist()
             for xx, tt, mm in zip(x.permute(1, 0), tensor.split(lengths_list), pred_mask.permute(1, 0)):
                 mm = mm.masked_select(xx != data['dico'].pad_index)
                 xx = xx.masked_select(xx != data['dico'].pad_index)
@@ -164,11 +162,6 @@ def build_nlm_domain_feature(data, params, batches, dataset):
                 domain_finetuned = np.exp(xe_loss / n_words)
                 qz1.append(domain_finetuned)
                 sents.append([data['dico'].id2word[word_id.item()] for word_id in yy])
-            # word_scores, loss = decoder('predict', tensor=dec2, pred_mask=pred_mask, y=y, get_scores=True)
-            # length_y = (len2 - 1).cpu().tolist()
-            # scores = torch.Tensor([torch.index_select(score, 0, ref) for score, ref in
-            #                        zip(F.log_softmax(word_scores, dim=-1), y)]).to(len2.device)
-            # domain_finetuned = torch.split(scores, length_y)
 
             tmp_tensor_list = []
             for x_batch in x_input.split(256):
@@ -185,13 +178,24 @@ def build_nlm_domain_feature(data, params, batches, dataset):
                 n_words = yy.size(0)
                 domain_based = np.exp(xe_loss / n_words)
                 qz2.append(domain_based)
+
             qz1 = torch.Tensor(np.array(qz1))
             qz2 = torch.Tensor(np.array(qz2))
             qz = (qz1 - qz2)
             qzss = torch.cat((qzss, qz))
             if i % batch_length ==0:
+                before_last_index = sent_last_index
+                sent_last_index = len(sents) - before_last_index
+                result = {'domain_feature': qzss, 'sents': sents[before_last_index:sent_last_index]}
+                if params.build_output_path.endswith('pth'):
+                    import os
+                    build_output_path = os.dirname(params.build_output_path)
+                else:
+                    build_output_path = params.build_output_path
+                torch.save(result, f'{build_output_path}/{i}.pth')
                 qzs = torch.cat((qzs,qzss))
                 qzss = torch.Tensor([])
+
         if len(qzss) != 0:
             qzs = torch.cat((qzs, qzss))
 
