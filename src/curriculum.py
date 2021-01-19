@@ -155,10 +155,11 @@ def build_nlm_domain_feature(data, params, batches, dataset):
                 tmp_tensor = encoder('fwd', x=x_batch, lengths=_lengths, positions=positions, langs=langs, causal=True)
                 tmp_tensor_list.append(tmp_tensor)
             tensor = torch.cat(tmp_tensor_list, dim=1)
-            for xx, tt, mm in zip(x, tensor.split(lengths_list), pred_mask.permute(1, 0)):
+            for xx, tt, mm in zip(x, tensor.transpose(1,0), pred_mask.permute(1, 0)):
                 mm = mm.masked_select(xx != data['dico'].pad_index)
                 xx = xx.masked_select(xx != data['dico'].pad_index)
                 yy = xx[1:].masked_select(mm[:-1])
+                tt = tt[:len(xx)]
                 word_scores, loss = encoder('predict', tensor=tt, pred_mask=mm.reshape(-1,1), y=yy, get_scores=True)
                 xe_loss = loss.item() * len(yy)
                 n_words = yy.size(0)
@@ -173,10 +174,11 @@ def build_nlm_domain_feature(data, params, batches, dataset):
                 tmp_tensor = base_encoder('fwd', x=x_batch, lengths=_lengths, positions=positions, langs=langs, causal=True)
                 tmp_tensor_list.append(tmp_tensor)
             tensor = torch.cat(tmp_tensor_list, dim=1)
-            for xx, tt, mm in zip(x, tensor.split(lengths_list), pred_mask.permute(1, 0)):
+            for xx, tt, mm in zip(x, tensor.transpose(1,0), pred_mask.permute(1, 0)):
                 mm = mm.masked_select(xx != data['dico'].pad_index)
                 xx = xx.masked_select(xx != data['dico'].pad_index)
                 yy = xx[1:].masked_select(mm[:-1])
+                tt = tt[:len(xx)]
                 word_scores, loss = base_encoder('predict', tensor=tt, pred_mask=mm.reshape(-1,1), y=yy, get_scores=True)
                 xe_loss = loss.item() * len(yy)
                 n_words = yy.size(0)
