@@ -160,7 +160,7 @@ def build_nlm_domain_feature(data, params, batches, dataset):
                 xx = xx.masked_select(xx != data['dico'].pad_index)
                 yy = xx[1:].masked_select(mm[:-1])
                 tt = tt[:len(xx)]
-                word_scores, loss = encoder('predict', tensor=tt, pred_mask=mm.reshape(-1,1), y=yy, get_scores=True)
+                word_scores, loss = encoder('predict', tensor=tt.unsqueeze(1), pred_mask=mm.reshape(-1,1), y=yy, get_scores=True)
                 xe_loss = loss.item() * len(yy)
                 n_words = yy.size(0)
                 domain_finetuned = np.exp(xe_loss / n_words)
@@ -179,7 +179,7 @@ def build_nlm_domain_feature(data, params, batches, dataset):
                 xx = xx.masked_select(xx != data['dico'].pad_index)
                 yy = xx[1:].masked_select(mm[:-1])
                 tt = tt[:len(xx)]
-                word_scores, loss = base_encoder('predict', tensor=tt, pred_mask=mm.reshape(-1,1), y=yy, get_scores=True)
+                word_scores, loss = base_encoder('predict', tensor=tt.unsqueeze(1), pred_mask=mm.reshape(-1,1), y=yy, get_scores=True)
                 xe_loss = loss.item() * len(yy)
                 n_words = yy.size(0)
                 domain_based = np.exp(xe_loss / n_words)
