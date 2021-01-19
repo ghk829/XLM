@@ -148,12 +148,14 @@ def build_nlm_domain_feature(data, params, batches, dataset):
             qz1 = []
             qz2 = []
             tmp_tensor_list = []
-            for x_batch in x_input.split(256):
+            x = x.transpose(1, 0)
+            for x_batch in x:
                 _lengths = torch.tensor(x_batch.shape[0], device=x_batch.device).reshape(-1)
+                x_batch = x_batch.reshape(-1, 1)
                 tmp_tensor = encoder('fwd', x=x_batch, lengths=_lengths, positions=positions, langs=langs, causal=True)
                 tmp_tensor_list.append(tmp_tensor)
-            tensor = torch.cat(tmp_tensor_list,dim=0)
-            for xx, tt, mm in zip(x.permute(1, 0), tensor.split(lengths_list), pred_mask.permute(1, 0)):
+            tensor = torch.cat(tmp_tensor_list, dim=1)
+            for xx, tt, mm in zip(x, tensor.split(lengths_list), pred_mask.permute(1, 0)):
                 mm = mm.masked_select(xx != data['dico'].pad_index)
                 xx = xx.masked_select(xx != data['dico'].pad_index)
                 yy = xx[1:].masked_select(mm[:-1])
@@ -165,12 +167,13 @@ def build_nlm_domain_feature(data, params, batches, dataset):
                 sents.append([data['dico'].id2word[word_id.item()] for word_id in yy])
 
             tmp_tensor_list = []
-            for x_batch in x_input.split(256):
+            for x_batch in x:
                 _lengths = torch.tensor(x_batch.shape[0], device=x_batch.device).reshape(-1)
+                x_batch = x_batch.reshape(-1, 1)
                 tmp_tensor = base_encoder('fwd', x=x_batch, lengths=_lengths, positions=positions, langs=langs, causal=True)
                 tmp_tensor_list.append(tmp_tensor)
-            tensor = torch.cat(tmp_tensor_list,dim=0)
-            for xx, tt, mm in zip(x.permute(1, 0), tensor.split(lengths_list), pred_mask.permute(1, 0)):
+            tensor = torch.cat(tmp_tensor_list, dim=1)
+            for xx, tt, mm in zip(x, tensor.split(lengths_list), pred_mask.permute(1, 0)):
                 mm = mm.masked_select(xx != data['dico'].pad_index)
                 xx = xx.masked_select(xx != data['dico'].pad_index)
                 yy = xx[1:].masked_select(mm[:-1])
