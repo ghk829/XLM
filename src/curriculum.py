@@ -149,14 +149,15 @@ def build_nlm_domain_feature(data, params, batches, dataset):
             qz1 = []
             qz2 = []
             tmp_tensor_list = []
-            x = x.transpose(1, 0)
-            for x_batch in x:
-                _lengths = torch.tensor(x_batch.shape[0], device=x_batch.device).reshape(-1)
-                x_batch = x_batch.reshape(-1, 1)
-                tmp_tensor = encoder('fwd', x=x_batch, lengths=_lengths, positions=positions, langs=langs, causal=True)
-                tmp_tensor_list.append(tmp_tensor)
-            tensor = torch.cat(tmp_tensor_list, dim=1)
-            for xx, tt, mm in zip(x, tensor.transpose(1,0), pred_mask.permute(1, 0)):
+            #x = x.transpose(1, 0)
+            # for x_batch in x:
+            #     _lengths = torch.tensor(x_batch.shape[0], device=x_batch.device).reshape(-1)
+            #     x_batch = x_batch.reshape(-1, 1)
+            #     tmp_tensor = encoder('fwd', x=x_batch, lengths=_lengths, positions=positions, langs=langs, causal=True)
+            #     tmp_tensor_list.append(tmp_tensor)
+            # tensor = torch.cat(tmp_tensor_list, dim=1)
+            tensor = encoder('fwd', x=x, lengths=torch.tensor(lengths_list).cuda(), positions=positions, langs=langs, causal=True)
+            for xx, tt, mm in zip(x.transpose(1,0), tensor.transpose(1,0), pred_mask.permute(1, 0)):
                 mm = mm.masked_select(xx != data['dico'].pad_index)
                 xx = xx.masked_select(xx != data['dico'].pad_index)
                 yy = xx[1:].masked_select(mm[:-1])
@@ -168,14 +169,15 @@ def build_nlm_domain_feature(data, params, batches, dataset):
                 qz1.append(domain_finetuned)
                 sents.append([data['dico'].id2word[word_id.item()] for word_id in yy])
 
-            tmp_tensor_list = []
-            for x_batch in x:
-                _lengths = torch.tensor(x_batch.shape[0], device=x_batch.device).reshape(-1)
-                x_batch = x_batch.reshape(-1, 1)
-                tmp_tensor = base_encoder('fwd', x=x_batch, lengths=_lengths, positions=positions, langs=langs, causal=True)
-                tmp_tensor_list.append(tmp_tensor)
-            tensor = torch.cat(tmp_tensor_list, dim=1)
-            for xx, tt, mm in zip(x, tensor.transpose(1,0), pred_mask.permute(1, 0)):
+            # tmp_tensor_list = []
+            # for x_batch in x:
+            #     _lengths = torch.tensor(x_batch.shape[0], device=x_batch.device).reshape(-1)
+            #     x_batch = x_batch.reshape(-1, 1)
+            #     tmp_tensor = base_encoder('fwd', x=x_batch, lengths=_lengths, positions=positions, langs=langs, causal=True)
+            #     tmp_tensor_list.append(tmp_tensor)
+            # tensor = torch.cat(tmp_tensor_list, dim=1)
+            tensor = base_encoder('fwd', x=x, lengths=torch.tensor(lengths_list).cuda(), positions=positions, langs=langs, causal=True)
+            for xx, tt, mm in zip(x.transpose(1,0), tensor.transpose(1,0), pred_mask.permute(1, 0)):
                 mm = mm.masked_select(xx != data['dico'].pad_index)
                 xx = xx.masked_select(xx != data['dico'].pad_index)
                 yy = xx[1:].masked_select(mm[:-1])
