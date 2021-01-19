@@ -211,5 +211,6 @@ def build_nlm_domain_feature(data, params, batches, dataset):
 
         if len(qzss) != 0:
             qzs = torch.cat((qzs, qzss))
+            qz1s = torch.cat((qz1s, qz1ss))
 
     return qzs, qz1s, sents
