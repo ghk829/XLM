@@ -105,6 +105,7 @@ def build_nlm_domain_feature(data, params, batches, dataset):
     qzs = torch.Tensor([])
     qzss = torch.Tensor([])
     qz1s = torch.Tensor([])
+    qz1ss = torch.Tensor([])
     sents = []
     sent_last_index = 0
     for lang1, lang2 in set(params.mt_steps):
@@ -189,11 +190,11 @@ def build_nlm_domain_feature(data, params, batches, dataset):
             qz2 = torch.Tensor(np.array(qz2))
             qz = (qz1 - qz2)
             qzss = torch.cat((qzss, qz))
-            qz1s = torch.cat([qz1s, qz1])
+            qz1ss = torch.cat([qz1ss, qz1])
             if i % batch_length ==0:
                 before_last_index = sent_last_index
                 sent_last_index = len(sents)
-                result = {'domain_feature': qzss, 'qz1s': qz1s, 'sents': sents[before_last_index:sent_last_index]}
+                result = {'domain_feature': qzss, 'domain_score': qz1ss, 'sents': sents[before_last_index:sent_last_index]}
                 if params.build_output_path.endswith('pth'):
                     import os
                     build_output_path = os.dirname(params.build_output_path)
@@ -202,10 +203,11 @@ def build_nlm_domain_feature(data, params, batches, dataset):
                 logger.info(f'{i}th saved')
                 torch.save(result, f'{build_output_path}/{i}.pth')
                 qzs = torch.cat((qzs,qzss))
+                qz1s = torch.cat((qz1s, qz1ss))
                 qzss = torch.Tensor([])
-                qz1s = torch.Tensor([])
+                qz1ss = torch.Tensor([])
 
         if len(qzss) != 0:
             qzs = torch.cat((qzs, qzss))
 
-    return qzs, sents
+    return qzs, qz1s, sents

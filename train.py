@@ -295,8 +295,8 @@ def main(params):
         #     shuffle=False
         # )
 
-        features, sents = build_nlm_domain_feature(data, params, batches, dataset)
-        result = {'indices': indices, 'domain_feature': features, 'sents': sents}
+        features, domain_score, sents = build_nlm_domain_feature(data, params, batches, dataset)
+        result = {'indices': indices, 'domain_feature': features, 'domain_score': domain_score, 'sents': sents}
         if params.build_output_path.endswith('pth'):
             build_output_path = params.build_output_path
         else:
